@@ -1,0 +1,53 @@
+<html>
+<body>
+
+<h2> Search <tmpl_if searched> Results </tmpl_if> </h2>
+
+<!--(Elapsed Time: <tmpl_var escape=html elapsed_time>s)-->
+
+<form name="search" action="/search">
+<input name="mode" value="perform_search" type="hidden">
+
+<table summary="layout">
+<tr>
+  <td><label for="fi_keywords">Keyword(s)</label></td> 
+  <td colspan="2"><input id="fi_keywords" name="keywords" value="" size="50"></td>
+</tr>
+<tr>
+  <td><label for="fi_category">Category</label></td>
+  <td>
+    <select id="fi_category" name="category">
+      <option value="/">All</option>
+      <tmpl_loop categories>
+      <option value="<tmpl_var path>"><tmpl_var name></option>
+      </tmpl_loop>
+    </select>
+  </td>
+  <td align="right"><input value="Search" type="submit"></td>
+</tr>
+</table>
+
+</form>
+
+<tmpl_if searched>
+  <tmpl_if hits>
+    <tmpl_include results_header.tmpl>
+
+    <dl>
+    <tmpl_loop hits>
+      <dt>
+      <a href="<tmpl_var hit_path>"><tmpl_if hit_title><tmpl_var escape=html hit_title><tmpl_else><tmpl_var escape=html hit_path></tmpl_if></a>
+      </dt>
+      <dd><tmpl_var escape=html hit_last_modified> - <tmpl_var escape=html hit_size></dd>
+      <dd><p><tmpl_var hit_description></p></dd>
+    </tmpl_loop>
+    </dl>
+
+    <tmpl_include results_header.tmpl>
+  <tmpl_else>
+  <p><strong>No results found</strong></p>
+  </tmpl_if>
+</tmpl_if>
+
+</html>
+</body>
