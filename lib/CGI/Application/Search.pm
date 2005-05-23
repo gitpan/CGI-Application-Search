@@ -3,7 +3,6 @@ use base 'CGI::Application';
 use strict;
 use warnings;
 use Text::Context;
-use SWISH::API;
 use Data::Page;
 use File::Spec::Functions qw(catfile);
 use Number::Format qw(format_bytes format_number);
@@ -12,7 +11,21 @@ use Time::HiRes;
 use Time::Piece;
 use POSIX;
 
-$CGI::Application::Search::VERSION = '0.01';
+$CGI::Application::Search::VERSION = '0.02';
+
+# load SWISH::API and complain if not available.  This is done here
+# and not in Makefile.PL because SWISH::API is not on CPAN.  It's part
+# of the Swish-e distribution.
+BEGIN {
+    eval "use SWISH::API";
+    die(<<END) if $@;
+
+Unable to load SWISH::API.  This module is included in the Swish-e
+distribution, inside the perl/ directory.  Please see the
+CGI::Application::Search documentation for more details.
+
+END
+}
 
 =head1 NAME 
 
@@ -25,7 +38,9 @@ CGI::Application::Search - Base class for CGI::App Swish-e site engines
 	
 	sub cgiapp_init {
 	  my $self = shift;
-	  $self->param('SWISHE-INDEX' =>'my-swishe.index');
+	  $self->param('SWISHE_INDEX' => 'my-swishe.index',
+                       'TEMPLATE'     => 'search_results.tmpl',
+                      );
 	}
 
 	#let the user turn context highlighting off
@@ -39,11 +54,124 @@ CGI::Application::Search - Base class for CGI::App Swish-e site engines
 
 =head1 DESCRIPTION
 
-A L<CGI::Application> based control module that uses Swish-e API in perl (L<http://swish-e.org>) to
-to perform searches on a swish-e index of documents. It uses L<HTML::Template> to display the search
-form and the results. It uses two templates ('search_results.tmpl' and 'results_header.tmpl') and
-any customization of the look and feel should happen in the templates. For the majority of the cases
-you should simply be able to adjust the style section found in the 'search_results.tmpl' template.
+A L<CGI::Application> based control module that uses Swish-e API in
+perl (L<http://swish-e.org>) to to perform searches on a swish-e index
+of documents. It uses L<HTML::Template> to display the search form and
+the results.  You may customize this template to alter the look and
+feel of the generated search interface.
+
+=head1 TUTORIAL
+
+You can skip this section if you're a Swish-e veteren.  Otherwise,
+read on for a step-by-step guide to adding a search interface to your
+site using CGI::Application::Search.
+
+=head2 Step 1: Install Swish-e
+
+The first thing you need to do is install Swish-e.  First, download it
+from the swish-e site:
+
+   http://swish-e.org
+
+Then unpack it, cd into the directory, build and install:
+
+  tar zxf swish-e-2.4.3.tar.gz
+  cd swish-e-2.4.3
+  ./configure
+  make
+  make install
+
+You'll also need to build the Perl module, SWISH::API, which this
+module uses:
+
+  cd perl
+  perl Makefile.PL
+  make
+  make install
+
+=head2 Step 2: Setup a Config File
+
+The first step to setting up a swish-e search engine is writing a
+config file.  Swish-e supports a smorgasborg of configuration options
+but just a few will get you started.
+
+  # index all HTML files in /path/to/index
+  IndexDir /path/to/index
+  IndexOnly .html .htm
+  IndexContents HTML2 .html .htm
+
+  # C::A::Search needs a description, use the first 1,500 characters
+  # of the body
+  StoreDescription HTML2 <body> 1500
+
+  # remove doc-root path so links will work on the results page
+  ReplaceRules remove /path/to/index
+
+Put the above in a file called F<swish-e.conf>.
+
+=head2 Step 3: Run the Indexer
+
+Now that you've got a configuration file you can index your site.  The
+basic command is:
+
+  $ swish-e -v 1 -c swish-e.conf -f /path/to/swishe-index
+
+The last part is the place where Swish-e will write its index.  It
+should be the name of a file in a directory writable by you and
+readable by your CGI scripts.
+
+Later you'll need to setup the indexer to run from cron, but for now
+just run it once.
+
+=head2 Step 4: Run a Test Search
+
+Swish-e has a command-line interface to running searches which you can
+use to confirm that your index is working.  For example, to search for
+"foo":
+
+  $ swish-e -w foo -f /path/to/swishe-index
+
+If that works you should see some hits (assuming your site contains
+"foo").
+
+=head2 Step 5: Setup an Instance Script
+
+Like all CGI::Application modules, CGI::Application::Search requires
+an instance script.  Create a file called 'search.pl' or 'search.cgi'
+in a place where your web server will execute it.  Put this in it:
+
+  #!/usr/bin/perl -w
+  use strict;
+  use CGI::Application::Search;
+  my $app = CGI::Application::Search->new(
+              PARAMS => { SWISHE_INDEX => '/path/to/index' });
+  $app->run();
+
+Now make it executable:
+
+  $ chmod +x search.pl
+
+=head2 Step 6: Test Your Instance Script
+
+First, test it on the command-line:
+
+  $ ./search.pl
+
+That should show you the HTML for the search form with no results.
+Now try it in your browser:
+
+  http://yoursite.example.com/search.pl
+
+If that doesn't work, check your error log.  Do not email me or the
+CGI::Application mailing list until you check your error log.  Yes, I
+mean you.  Thanks.
+
+=head2 Step 7: Rejoice
+
+You've just completed the world's easiest search system setup!  Now go
+setup that indexing cronjob.
+
+=head1 RUN_MODES
 
 This controller has two run modes. The start_mode is L<show_search>.
 
@@ -101,6 +229,8 @@ sub generate_search_query {
             $query .= " and $prop=($value)" if $value;
         }
     }
+
+    return $query;
 }
 
 =head2 setup()
@@ -118,6 +248,13 @@ Here is a list of these parameters, what each does, and what the default value i
 
 This is the swishe index used for the searches. The default is 'data/swish-e.index'. You will probably
 override this every time.
+
+=item * TEMPLATE
+
+The name of the search interface template.  A default template is
+included within the module which will be used if you don't specify
+one.  A more elaborate example is included in the distribution under
+the C<tmpl/> directory.
 
 =item * PER_PAGE
 
@@ -199,23 +336,31 @@ sub setup {
 
 =head2 show_search()
 
-This method will load the 'Search/search_results.tmpl' L<HTML::Template> and display it to the user.
-It will 'associate' this template with $self so that any parameters in $self->param() are also 
-accessible to the template. It will also use L<HTML::FillInForm> to fill in the search form
-with the previously selected parameters.
+This method will load the template pointed to by the C<TEMPLATE> param
+(falling back on a default internal template if none is configured)
+and display it to the user.  It will 'associate' this template with
+$self so that any parameters in $self->param() are also accessible to
+the template. It will also use L<HTML::FillInForm> to fill in the
+search form with the previously selected parameters.
 
 =cut 
 
 sub show_search {
     my $self = shift;
+    my %tmpl_args = (associate         => $self,
+                     global_vars       => 1,
+                     die_on_bad_params => 0);
 
-    my $tmpl = $self->load_tmpl(
-        'Search/search_results.tmpl',
-        associate         => $self,
-        global_vars       => 1,
-        cache             => 0,
-        die_on_bad_params => 0,
-    );
+    # load the template configured falling back to the default template
+    my $tmpl;
+    if ($self->param('TEMPLATE')) {
+        $tmpl = $self->load_tmpl($self->param('TEMPLATE'), %tmpl_args);
+    } else {
+        our $DEFAULT_TEMPLATE;
+        require HTML::Template;
+        $tmpl = HTML::Template->new(scalarref => \$DEFAULT_TEMPLATE,
+                                    %tmpl_args);
+    }
 
     my $filler = HTML::FillInForm->new();
     my $output = $tmpl->output();
@@ -246,7 +391,9 @@ sub perform_search {
 
         #create my swish-e object
         my $swish = SWISH::API->new( $self->param('SWISHE_INDEX') );
-        die $swish->ErrorString if ( $swish->Error );
+        die "Problem reading " . $self->param('SWISHE_INDEX') . " : " . 
+          $swish->ErrorString
+            if ( $swish->Error );
 
         #get the query
         my $query = $self->generate_search_query($keywords);
@@ -270,7 +417,7 @@ sub perform_search {
     # if there are any extra properties used in the search, make them available to
     # the templates with the value in the query object
     my $query = $self->query;
-    foreach my $prop ( @{$self->param('EXTRA_PROPERTIES')} ) {
+    foreach my $prop ( @{$self->param('EXTRA_PROPERTIES') || []} ) {
         $self->param($prop => $query->param($prop));
     } 
     $self->param( 'keywords' => $keywords );
@@ -405,16 +552,62 @@ sub _get_paging_vars {
     $self->param( pages => \@pages ) if ($#pages);
 }
 
+# default template to use if the user doesn't specify one
+our $DEFAULT_TEMPLATE = <<END;
+<h2>Search <tmpl_if searched> Results</tmpl_if></h2>
+<form><input name="mode" value="perform_search" type="hidden">
+
+<p><input id="fi_keywords" name="keywords" value="" size="50"> <input value="Search" type="submit"></p>
+
+<tmpl_if searched>
+  <tmpl_if hits>
+     <tmpl_if pages>
+       <p> Pages: 
+       <tmpl_unless first_page>
+             <a href="?mode=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var escape=url prev_page>"></tmpl_unless>&laquo;Prev<tmpl_unless first_page></a>
+       </tmpl_unless>
+       <tmpl_loop pages>
+         <tmpl_if current>
+           <tmpl_var escape=html page_num>
+         <tmpl_else>
+           <a href="?mode=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var escape=url page_num>"><tmpl_var escape=html page_num></a>
+         </tmpl_if>
+       </tmpl_loop>
+       <tmpl_unless last_page><a href="?mode=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var escape=url next_page>"></tmpl_unless>Next&raquo;<tmpl_unless last_page></a></tmpl_unless>
+       </p>
+     </tmpl_if>
+
+    <p>Results: <tmpl_var escape=html start_num> to <tmpl_var escape=html stop_num> of <tmpl_var escape=html total_entries></p>
+
+    <dl>
+    <tmpl_loop hits>
+      <dt>
+      <a href="<tmpl_var hit_path>"><tmpl_if hit_title><tmpl_var escape=html hit_title><tmpl_else><tmpl_var escape=html hit_path></tmpl_if></a>
+      </dt>
+      <dd><tmpl_var escape=html hit_last_modified> - <tmpl_var escape=html hit_size></dd>
+      <dd><p><tmpl_var hit_description></p></dd>
+    </tmpl_loop>
+    </dl>
+</tmpl_if></tmpl_if>
+
+<tmpl_if searched><tmpl_unless hits><p>No Results Found.</p></tmpl_unless></tmpl_if>
+END
+
 1;
 
 __END__
 
 =head1 TEMPLATES
 
-Two templates are provided as examples of how to use this module. Please feel free
-to copy and change them in what ever way you see fit. To help in giving you more information
-to display (or not display, depending on your preference) the following variables are available
-for your templates:
+A default template is provided inside the module which will be used if
+you don't specify a template.  This is useful for testing out the
+module and may also serve as a base for your template development.
+
+Two more elaborate templates are provided as examples of how to use
+this module in the C<tmpl/> directory. Please feel free to copy and
+change them in what ever way you see fit. To help in giving you more
+information to display (or not display, depending on your preference)
+the following variables are available for your templates:
 
 =head2 Global Tmpl Vars
 
@@ -508,15 +701,11 @@ C<%B %d, %Y>.
 
 =back
 
-=head2 PAGES TMPL_LOOP Vars
+=head1 OTHER NOTES
 
-=over 8
+=over
 
 =item *
-
-=back
-
-=head1 OTHER NOTES
 
 If at any time prior to the execution of the 'perform_search' run mode you set the 
 C<$self-<gt>param('results')> parameter a search will not be performed, but rather
@@ -524,10 +713,22 @@ and empty set of results is returned. This is helpful when you decide in either
 cgiapp_init or cgiapp_prerun that this user does not have permissions to perform the desired
 search.
 
+=item *
+
+You must use the StoreDescription setting in your Swish-e
+configuration file.  If you don't you'll get an error when
+C::A::Search tries to retrieve a description for each hit.
+
+=back
+
 =head1 AUTHOR
 
 Michael Peters <mpeters@plusthree.com>
 
 Thanks to Plus Three, LP (http://www.plusthree.com) for sponsoring my work on this module.
+
+=head1 CONTRIBUTORS
+
+Sam Tregar <sam@tregar.com>
 
 
