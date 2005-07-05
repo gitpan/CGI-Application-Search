@@ -1,37 +1,28 @@
 <html>
 <body>
 
-<h2> Search <tmpl_if searched> Results </tmpl_if> </h2>
+<h2>Search<tmpl_if searched> Results</tmpl_if></h2>
 
-<!--(Elapsed Time: <tmpl_var escape=html elapsed_time>s)-->
 
-<form name="search" action="/search">
+<form name="search" action="">
 <input name="mode" value="perform_search" type="hidden">
 
 <table summary="layout">
 <tr>
-  <td><label for="fi_keywords">Keyword(s)</label></td> 
-  <td colspan="2"><input id="fi_keywords" name="keywords" value="" size="50"></td>
+  <td><label for="keywords">Keyword(s)</label></td> 
+  <td colspan="2"><input id="keywords" name="keywords" value="" size="50"></td>
 </tr>
 <tr>
-  <td><label for="fi_category">Category</label></td>
-  <td>
-    <select id="fi_category" name="category">
-      <option value="/">All</option>
-      <tmpl_loop categories>
-      <option value="<tmpl_var path>"><tmpl_var name></option>
-      </tmpl_loop>
-    </select>
-  </td>
-  <td align="right"><input value="Search" type="submit"></td>
+  <td colspan="2" align="right"><input value="Search" type="submit"></td>
 </tr>
 </table>
 
 </form>
 
 <tmpl_if searched>
+  (Elapsed Time: <tmpl_var escape=html elapsed_time>s)
   <tmpl_if hits>
-    <tmpl_include results_header.tmpl>
+    <tmpl_include results_nav.tmpl>
 
     <dl>
     <tmpl_loop hits>
@@ -43,7 +34,7 @@
     </tmpl_loop>
     </dl>
 
-    <tmpl_include results_header.tmpl>
+    <tmpl_include results_nav.tmpl>
   <tmpl_else>
   <p><strong>No results found</strong></p>
   </tmpl_if>

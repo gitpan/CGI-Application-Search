@@ -1,4 +1,5 @@
-use Test::More qw(no_plan);
+use Test::More;
+plan(tests => 1);
 
 # 1
 # make sure that we can load the module

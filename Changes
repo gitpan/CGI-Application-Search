@@ -1,0 +1,15 @@
+Revision history for Perl extension CGI::Application::Dispatch.
+
+0.03 (Jul 05, 2005)
+    - changed from straight H::T to CGI::Application::Plugin::AnyTemplate
+        for flexibility
+    - better template documentation and minor template fixes
+    - more complete test suite, still not 100% coverage, but closer
+
+0.02 (May 23, 2005)
+    - find and fix document mistakes - Sam Tregar <sam@tregar.com>
+    - added tutorial for getting started with swishe - Sam Tregar
+    - added TEMPLATE option to setup() - Sam Tregar
+
+0.01 (May 18, 2005)
+    - First released version

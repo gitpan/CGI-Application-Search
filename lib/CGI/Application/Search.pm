@@ -1,7 +1,9 @@
 package CGI::Application::Search;
-use base 'CGI::Application';
 use strict;
 use warnings;
+use base 'CGI::Application';
+
+use CGI::Application::Plugin::AnyTemplate;
 use Text::Context;
 use Data::Page;
 use File::Spec::Functions qw(catfile);
@@ -11,7 +13,7 @@ use Time::HiRes;
 use Time::Piece;
 use POSIX;
 
-$CGI::Application::Search::VERSION = '0.02';
+$CGI::Application::Search::VERSION = '0.03';
 
 # load SWISH::API and complain if not available.  This is done here
 # and not in Makefile.PL because SWISH::API is not on CPAN.  It's part
@@ -27,6 +29,7 @@ CGI::Application::Search documentation for more details.
 END
 }
 
+
 =head1 NAME 
 
 CGI::Application::Search - Base class for CGI::App Swish-e site engines
@@ -38,9 +41,10 @@ CGI::Application::Search - Base class for CGI::App Swish-e site engines
 	
 	sub cgiapp_init {
 	  my $self = shift;
-	  $self->param('SWISHE_INDEX' => 'my-swishe.index',
-                       'TEMPLATE'     => 'search_results.tmpl',
-                      );
+	  $self->param(
+        'SWISHE_INDEX' => 'my-swishe.index',
+        'TEMPLATE'     => 'search_results.tmpl',
+      );
 	}
 
 	#let the user turn context highlighting off
@@ -192,12 +196,96 @@ L<HIGHLIGHT_START> and L<HIGHLIGHT_STOP> options.
 
 =back
 
-
-=head1 METHODS
+=head1 OTHER METHODS
 
 Most of the time you will not need to call the methods that are implemented in this module. But
 in cases where more customization is required than can be done in the templates, it might be prudent
 to override or extend these methods in your derived class.
+
+=head2 new()
+
+We simply override and extend the L<CGI::Application> new() constructor
+to also setup our callbacks.
+
+=cut
+
+sub new {
+    my $class = shift;
+    $class->add_callback(init => \&_my_init);
+    my $self = $class->SUPER::new(@_);
+    $class->add_callback(prerun => \&_my_prerun);
+    return $self;
+}
+
+=head2 setup()
+
+A simple no-op sub that you are free to override to run at setup time
+
+=cut
+
+# no-op to get around C::A setting the start_mode() in setup() and new().
+sub setup { }
+
+
+sub _my_init {
+    my $self = shift;
+    $self->start_mode('show_search');
+    $self->run_modes(
+        show_search    => 'show_search',
+        perform_search => 'perform_search',
+    );
+}
+
+sub _my_prerun {
+    my $self = shift;
+
+    # setup my defaults
+    my %defaults = (
+        SWISHE_INDEX        => catfile( 'data', 'swish-e.index' ),
+        PER_PAGE            => 10,
+        HIGHLIGHT_CONTEXT   => 1,
+        HIGHLIGHT_START     => q(<strong>),
+        HIGHLIGHT_STOP      => q(</strong>),
+        CONTEXT_LENGTH      => 250,
+        TEMPLATE_TYPE       => 'HTMLTemplate',
+        TEMPLATE_CONFIG     => undef,
+    );
+    foreach my $k (keys %defaults) {
+        $self->param($k => $defaults{$k})
+            unless( defined $self->param($k) );
+    }
+
+    # setup the template configs
+    my %tmpl_config = (
+        default_type                => $self->param('TEMPLATE_TYPE'),
+        auto_add_template_extension => 0,
+        include_paths               => [ $self->tmpl_path ],
+        HTMLTemplate                => {
+            global_var          => 1,
+            loop_context_vars   => 1,
+            die_on_bad_params   => 0,
+        },
+        HTMLTemplateExpr            => {
+            global_var          => 1,
+            loop_context_vars   => 1,
+            die_on_bad_params   => 0,
+        },
+        TemplateToolkit             => {
+            INCLUDE_PATH        => $self->tmpl_path(),
+        },
+    );
+    
+    # add any overriding TEMPLATE_CONFIG options
+    if( $self->param('TEMPLATE_CONFIG') ) {
+        $tmpl_config{$self->param('TEMPLATE_TYPE')} = {
+            %{$tmpl_config{$self->param('TEMPLATE_TYPE')}},
+            %{$self->param('TEMPLATE_CONFIG')},
+        };
+    }
+    $self->template->config(%tmpl_config);
+}
+
+=head1 RUN MODES
 
 =head2 generate_search_query($keywords)
 
@@ -233,50 +321,114 @@ sub generate_search_query {
     return $query;
 }
 
-=head2 setup()
+=head1 CONFIGURATION
 
-This method set's up our application with two run modes and sets the L<show_search> method
-as the default run mode. It also sets the defaults for several internal parameters that
-this module uses. These parameters can be reset at any time (in your cgiapp_init or cgiapp_prerun,
-or PARAMS hash in new()).
+There are several configuration parameters that you can set at any 
+time (in your cgiapp_init or cgiapp_prerun, or PARAMS hash in new()) 
+before the run mode is called that will affect the search and display 
+of the results. They are:
 
-Here is a list of these parameters, what each does, and what the default value is
-
-=over 8
-
-=item * SWISHE_INDEX
+=head2 SWISHE_INDEX
 
 This is the swishe index used for the searches. The default is 'data/swish-e.index'. You will probably
 override this every time.
 
-=item * TEMPLATE
+=head2 TEMPLATE
 
 The name of the search interface template.  A default template is
 included within the module which will be used if you don't specify
 one.  A more elaborate example is included in the distribution under
 the C<tmpl/> directory.
 
-=item * PER_PAGE
+The following parameters are passed to your template regardless of it's 
+C<< TEMPLATE_TYPE >>:
+
+=over 8
+
+=item searched
+
+=item elapsed_time
+
+=item keywords
+
+=item hits
+
+=over 8
+
+=item hit_title
+
+=item hit_path
+
+=item hit_last_modified
+
+=item hit_size
+
+=item hit_description
+
+=back
+
+=item first_page
+
+=item last_page
+
+=item prev_page
+
+=item next_page
+
+=item pages
+
+=over 8
+
+=item current
+
+=item page_num
+
+=back
+
+=item start_num
+
+=item stop_num
+
+=item total_entries
+
+=back
+
+=head2 TEMPLATE_TYPE
+
+This module uses L<CGI::Application::Plugin::AnyTemplate> to allow flexibility
+in choosing which templating system to use for your search. This works especially
+well when you are trying to integrate the Search into an existing app with an
+existing templating structure.
+
+This value is passed to the C<< $self->template->config() >> method as the 
+C<< default_type >>. By default it is 'HTMLTemplate'. Please see 
+L<CGI::Application::Plugin::AnyTemplate> for more options.
+
+If you want more control of configuration for the template the it would probably
+best be done by subclassing CGI::Application::Search and passing your desired
+params to C<< $self->template->config >>.
+
+=head2 PER_PAGE
 
 How many search result items to display per page. The default is 10.
 
-=item * HIGHLIGHT_CONTEXT
+=head2 HIGHLIGHT_CONTEXT
 
 Boolean indicating whether or not we should highlight the context. The default is true.
 
-=item * HIGHLIGHT_START
+=head2 HIGHLIGHT_START
 
 The text to be prepended to a word being highlighted. If this value is false
 and L<HIGHTLIGHT_CONTEXT> is true then it will use the default provided by
 L<Text::Context>. The default text is C<<lt>strong<gt>>.
 
-=item * HIGHLIGHT_STOP
+=head2 HIGHLIGHT_STOP
 
 The text to be appended to a word being highlighted. If this value is false
 and L<HIGHTLIGHT_CONTEXT> is true then it will use the default provided by
 L<Text::Context>. The default text is C<<lt>/strong<gt>>.
 
-=item * EXTRA_PROPERTIES
+=head2 EXTRA_PROPERTIES
 
 This is an array ref of extra properties used in the search. By default, the module
 will only use the value of the 'keywords' parameter coming in the CGI query.
@@ -294,45 +446,12 @@ documentation).
 
 The default is an empty list.
 
-=item * CONTEXT_LENGTH
+=head2 CONTEXT_LENGTH
 
 This is the maximum length for the context (in chars) that is displayed for each
 search result. The default is 250 characters.
 
-=item * START_MODE
-
-This contains the name of a run mode method that will be used as the start method
-instead of L<show_search>. If you want to change this parameter it must be done prior
-to running the 'setup()' sub (in PARAMS hash to new() or in cgiapp_init()).
-
-=back
-
 =cut
-
-sub setup {
-    my $self = shift;
-    $self->start_mode( $self->param('START_MODE') || 'show_search' );
-    $self->mode_param('mode');
-    $self->run_modes(
-        show_search    => 'show_search',
-        perform_search => 'perform_search',
-    );
-
-    $self->param( SWISHE_INDEX => catfile( 'data', 'swish-e.index' ) )
-      if ( !defined $self->param('SWISHE_INDEX') );
-    $self->param( PER_PAGE => 10 )
-      if ( !defined $self->param('PER_PAGE') );
-    $self->param( HIGHLIGHT_CONTEXT => 1 )
-      if ( !defined $self->param('HIGHLIGHT_CONTEXT') );
-    $self->param( HIGHLIGHT_START => q(<strong>) )
-      if ( !$self->param('HIGHLIGHT_START') );
-    $self->param( HIGHLIGHT_STOP => q(</strong>) )
-      if ( !$self->param('HIGHLIGHT_STOP') );
-    $self->param( CONTEXT_LENGTH => 250 )
-      if ( !defined $self->param('CONTEXT_LENGTH') );
-}
-
-=head1 RUN MODES
 
 =head2 show_search()
 
@@ -347,24 +466,36 @@ search form with the previously selected parameters.
 
 sub show_search {
     my $self = shift;
-    my %tmpl_args = (associate         => $self,
-                     global_vars       => 1,
-                     die_on_bad_params => 0);
 
     # load the template configured falling back to the default template
     my $tmpl;
     if ($self->param('TEMPLATE')) {
-        $tmpl = $self->load_tmpl($self->param('TEMPLATE'), %tmpl_args);
+        $tmpl = $self->template->load($self->param('TEMPLATE'));
     } else {
         our $DEFAULT_TEMPLATE;
         require HTML::Template;
-        $tmpl = HTML::Template->new(scalarref => \$DEFAULT_TEMPLATE,
-                                    %tmpl_args);
+        $tmpl = HTML::Template->new(
+            scalarref         => \$DEFAULT_TEMPLATE,
+            global_vars       => 1,
+            die_on_bad_params => 0,
+        );
     }
+    # give it all the stuff in $self
+    my %tmpl_params = (
+        self => $self
+    );
+    foreach my $param qw(
+        searched elapsed_time keywords hits first_page 
+        last_page prev_page next_page pages start_num 
+        stop_num total_entries
+    ) {
+        $tmpl->param( $param => $self->param($param) )
+            if( $self->param($param) );
+    }
+    $tmpl->param(%tmpl_params);
 
     my $filler = HTML::FillInForm->new();
-    my $output = $tmpl->output();
-    return $filler->fill( scalarref => \$output, fobject => $self->query );
+    return $filler->fill( scalarref => $tmpl->output, fobject => $self->query );
 }
 
 =head2 perform_search()
@@ -381,42 +512,47 @@ through the results. Then we will return to the L<show_search()> method for disp
 
 sub perform_search {
     my $self = shift;
+    my $query = $self->query;
 
     #if we have any keywords
     my $keywords = $self->query->param('keywords');
+    if ( defined $keywords && !$self->param('results') ) {
+        my $index = $self->param('SWISHE_INDEX');
+        # make sure the index exists and is readable
+        die "Index file $index does not exist!"
+            unless( -e $index );
 
-    if ( !$self->param('results') ) {
         $self->param( 'searched' => 1 );
         my $start_time = Time::HiRes::time();
 
         #create my swish-e object
-        my $swish = SWISH::API->new( $self->param('SWISHE_INDEX') );
-        die "Problem reading " . $self->param('SWISHE_INDEX') . " : " . 
-          $swish->ErrorString
+        my $swish = SWISH::API->new( $index );
+        die "Problem reading $index : " . $swish->ErrorString
             if ( $swish->Error );
 
         #get the query
-        my $query = $self->generate_search_query($keywords);
+        my $search_query = $self->generate_search_query($keywords);
         return $self->show_search() if not defined $query;
 
         #if we already have results (usually empty results)
-        my $results = $swish->Query($query);
-        if ( $swish->Error ) {
-            warn "Unable to create query: " . $swish->ErrorString ;
-            return $self->show_search();
+        if( $search_query ) {
+            my $results = $swish->Query($search_query);
+            if ( $swish->Error ) {
+                warn "Unable to create query: " . $swish->ErrorString ;
+                return $self->show_search();
+            }
+
+            $self->param( 'elapsed_time' => format_number( Time::HiRes::time - $start_time, 3, 1 ) );
+
+            #create my pager and then go to the start page
+            $self->_get_paging_vars($results);
+            my @words = $self->_get_search_terms( $swish, $results, $keywords );
+            $self->param( 'hits' => $self->_process_results( $results, @words ) );
         }
-
-        $self->param( 'elapsed_time' => format_number( Time::HiRes::time - $start_time, 3, 1 ) );
-
-        #create my pager and then go to the start page
-        $self->_get_paging_vars($results);
-        my @words = $self->_get_search_terms( $swish, $results, $keywords );
-        $self->param( 'hits' => $self->_process_results( $results, @words ) );
     }
 
     # if there are any extra properties used in the search, make them available to
     # the templates with the value in the query object
-    my $query = $self->query;
     foreach my $prop ( @{$self->param('EXTRA_PROPERTIES') || []} ) {
         $self->param($prop => $query->param($prop));
     } 
@@ -555,7 +691,7 @@ sub _get_paging_vars {
 # default template to use if the user doesn't specify one
 our $DEFAULT_TEMPLATE = <<END;
 <h2>Search <tmpl_if searched> Results</tmpl_if></h2>
-<form><input name="mode" value="perform_search" type="hidden">
+<form><input name="rm" value="perform_search" type="hidden">
 
 <p><input id="fi_keywords" name="keywords" value="" size="50"> <input value="Search" type="submit"></p>
 
@@ -564,16 +700,16 @@ our $DEFAULT_TEMPLATE = <<END;
      <tmpl_if pages>
        <p> Pages: 
        <tmpl_unless first_page>
-             <a href="?mode=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var escape=url prev_page>"></tmpl_unless>&laquo;Prev<tmpl_unless first_page></a>
+             <a href="?rm=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var escape=url prev_page>"></tmpl_unless>&laquo;Prev<tmpl_unless first_page></a>
        </tmpl_unless>
        <tmpl_loop pages>
          <tmpl_if current>
            <tmpl_var escape=html page_num>
          <tmpl_else>
-           <a href="?mode=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var escape=url page_num>"><tmpl_var escape=html page_num></a>
+           <a href="?rm=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var escape=url page_num>"><tmpl_var escape=html page_num></a>
          </tmpl_if>
        </tmpl_loop>
-       <tmpl_unless last_page><a href="?mode=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var escape=url next_page>"></tmpl_unless>Next&raquo;<tmpl_unless last_page></a></tmpl_unless>
+       <tmpl_unless last_page><a href="?rm=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var escape=url next_page>"></tmpl_unless>Next&raquo;<tmpl_unless last_page></a></tmpl_unless>
        </p>
      </tmpl_if>
 

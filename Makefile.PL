@@ -16,6 +16,7 @@ WriteMakefile
                            'Text::Context::EitherSide' => '1.1',
                            'POSIX' => '0',
                            'HTML::FillInForm' => '1.04',
+                           'CGI::Application::Plugin::AnyTemplate' => 0,
                            'File::Spec::Functions' => '0',
                            'Text::Context' => '3.5'
                          }

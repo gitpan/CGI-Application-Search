@@ -1,8 +1,11 @@
 Build.PL
+Changes
 lib/CGI/Application/Search.pm
 Makefile.PL
 MANIFEST			This list of files
 META.yml
-t/01.t
-tmpl/results_header.tmpl
+t/00-pod.t
+t/01-pod-coverage.t
+t/02-load.t
+tmpl/results_nav.tmpl
 tmpl/search_results.tmpl
