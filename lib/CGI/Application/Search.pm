@@ -1,6 +1,7 @@
 package CGI::Application::Search;
 use strict;
 use warnings;
+use Carp;
 use base 'CGI::Application';
 
 use CGI::Application::Plugin::AnyTemplate;
@@ -13,14 +14,15 @@ use Time::HiRes;
 use Time::Piece;
 use POSIX;
 
-$CGI::Application::Search::VERSION = '0.03';
+our $VERSION = '0.04';
+our $DEBUG;
 
 # load SWISH::API and complain if not available.  This is done here
 # and not in Makefile.PL because SWISH::API is not on CPAN.  It's part
 # of the Swish-e distribution.
 BEGIN {
     eval "use SWISH::API";
-    die(<<END) if $@;
+    croak(<<END) if $@;
 
 Unable to load SWISH::API.  This module is included in the Swish-e
 distribution, inside the perl/ directory.  Please see the
@@ -113,10 +115,13 @@ but just a few will get you started.
 
 Put the above in a file called F<swish-e.conf>.
 
+NOTE: The above is a very simple swish-e.conf file. To bask in the
+power and flexibility that is swish-e, please see the official documentation. 
+
 =head2 Step 3: Run the Indexer
 
-Now that you've got a configuration file you can index your site.  The
-basic command is:
+Now that you've got a basic configuration file you can index your site.  
+The corresponding simple command is:
 
   $ swish-e -v 1 -c swish-e.conf -f /path/to/swishe-index
 
@@ -148,7 +153,8 @@ in a place where your web server will execute it.  Put this in it:
   use strict;
   use CGI::Application::Search;
   my $app = CGI::Application::Search->new(
-              PARAMS => { SWISHE_INDEX => '/path/to/index' });
+    PARAMS => { SWISHE_INDEX => '/path/to/index' }
+  );
   $app->run();
 
 Now make it executable:
@@ -168,7 +174,7 @@ Now try it in your browser:
 
 If that doesn't work, check your error log.  Do not email me or the
 CGI::Application mailing list until you check your error log.  Yes, I
-mean you.  Thanks.
+mean you. Thanks.
 
 =head2 Step 7: Rejoice
 
@@ -324,9 +330,9 @@ sub generate_search_query {
 =head1 CONFIGURATION
 
 There are several configuration parameters that you can set at any 
-time (in your cgiapp_init or cgiapp_prerun, or PARAMS hash in new()) 
-before the run mode is called that will affect the search and display 
-of the results. They are:
+time (using C<< param() >> in your cgiapp_init or cgiapp_prerun, 
+or PARAMS hash in new()) before the run mode is called that will 
+affect the search and display of the results. They are:
 
 =head2 SWISHE_INDEX
 
@@ -342,56 +348,6 @@ the C<tmpl/> directory.
 
 The following parameters are passed to your template regardless of it's 
 C<< TEMPLATE_TYPE >>:
-
-=over 8
-
-=item searched
-
-=item elapsed_time
-
-=item keywords
-
-=item hits
-
-=over 8
-
-=item hit_title
-
-=item hit_path
-
-=item hit_last_modified
-
-=item hit_size
-
-=item hit_description
-
-=back
-
-=item first_page
-
-=item last_page
-
-=item prev_page
-
-=item next_page
-
-=item pages
-
-=over 8
-
-=item current
-
-=item page_num
-
-=back
-
-=item start_num
-
-=item stop_num
-
-=item total_entries
-
-=back
 
 =head2 TEMPLATE_TYPE
 
@@ -493,9 +449,13 @@ sub show_search {
             if( $self->param($param) );
     }
     $tmpl->param(%tmpl_params);
+    my $output = $tmpl->output();
 
     my $filler = HTML::FillInForm->new();
-    return $filler->fill( scalarref => $tmpl->output, fobject => $self->query );
+    return $filler->fill( 
+        scalarref   => ref( $output ) ? $output : \$output,
+        fobject     => $self->query, 
+    );
 }
 
 =head2 perform_search()
@@ -519,7 +479,7 @@ sub perform_search {
     if ( defined $keywords && !$self->param('results') ) {
         my $index = $self->param('SWISHE_INDEX');
         # make sure the index exists and is readable
-        die "Index file $index does not exist!"
+        croak "Index file $index does not exist!"
             unless( -e $index );
 
         $self->param( 'searched' => 1 );
@@ -527,18 +487,17 @@ sub perform_search {
 
         #create my swish-e object
         my $swish = SWISH::API->new( $index );
-        die "Problem reading $index : " . $swish->ErrorString
+        croak "Problem reading $index : " . $swish->ErrorString
             if ( $swish->Error );
 
-        #get the query
         my $search_query = $self->generate_search_query($keywords);
-        return $self->show_search() if not defined $query;
+        # if we got one
+        if( defined $search_query ) {
 
-        #if we already have results (usually empty results)
-        if( $search_query ) {
             my $results = $swish->Query($search_query);
             if ( $swish->Error ) {
-                warn "Unable to create query: " . $swish->ErrorString ;
+                carp "Unable to create query: " .  $swish->ErrorString
+                    if( $DEBUG );
                 return $self->show_search();
             }
 
@@ -548,6 +507,8 @@ sub perform_search {
             $self->_get_paging_vars($results);
             my @words = $self->_get_search_terms( $swish, $results, $keywords );
             $self->param( 'hits' => $self->_process_results( $results, @words ) );
+        } else {
+            return $self->show_search();
         }
     }
 
@@ -572,13 +533,13 @@ sub _process_results {
     #while we still have more results
     while ( my $current = $results->NextResult ) {
         my %tmp = (
-          hit_reccount => $current->Property('swishreccount'),
-          hit_rank     => $current->Property('swishrank'),
-          hit_title    => $current->Property('swishtitle'),
-          hit_path     => $current->Property('swishdocpath'),
-          hit_size     => format_bytes( $current->Property('swishdocsize') ),
-          hit_description   => $current->Property('swishdescription'),
-          hit_last_modified => localtime($current->Property('swishlastmodified'))->strftime('%B %d, %Y'),
+          reccount => $current->Property('swishreccount'),
+          rank     => $current->Property('swishrank'),
+          title    => $current->Property('swishtitle'),
+          path     => $current->Property('swishdocpath'),
+          size     => format_bytes( $current->Property('swishdocsize') ),
+          description   => $current->Property('swishdescription'),
+          last_modified => localtime($current->Property('swishlastmodified'))->strftime('%B %d, %Y'),
         );
 
         #now add any EXTRA_PROPERTIES that we want to show
@@ -588,23 +549,27 @@ sub _process_results {
         }
 
         #if we want to highlight the description
-        if ( $self->param('HIGHLIGHT_CONTEXT') && scalar(@keywords)) {
-            my $content = $tmp{hit_description};
-
-            #now get the context
-            my $context = Text::Context->new( $content, @keywords );
-            $context = $context->as_html(
-                start   => $self->param('HIGHLIGHT_START'),
-                end     => $self->param('HIGHLIGHT_STOP'),
-                max_len => $self->param('CONTEXT_LENGTH'),
-            );
-            $tmp{hit_description} = $context
-              || substr( $content, 0, $self->param('CONTEXT_LENGTH') );
+        if ( $self->param('HIGHLIGHT_CONTEXT') ) {
+            my $content = $tmp{description} || '';
+            if( $content ) {
+                #now get the context
+                my $context = Text::Context->new( $content, @keywords );
+                $context = $context->as_html(
+                    start   => $self->param('HIGHLIGHT_START'),
+                    end     => $self->param('HIGHLIGHT_STOP'),
+                    max_len => $self->param('CONTEXT_LENGTH'),
+                );
+                if( $context ) {
+                    $tmp{description} = $context;
+                } else {
+                    $tmp{description} = substr( $content, 0, $self->param('CONTEXT_LENGTH') );
+                }
+            }
         }
 
-        elsif( $tmp{hit_description} ) {
+        elsif( $tmp{description} ) {
             #else we aren't highlighting, but we still want the content to be the right length
-            $tmp{hit_description} = substr( $tmp{hit_description}, 0, $self->param('CONTEXT_LENGTH') );
+            $tmp{description} = substr( $tmp{description}, 0, $self->param('CONTEXT_LENGTH') );
         }
         push( @result_loop, \%tmp );
 
@@ -617,36 +582,34 @@ sub _process_results {
 
 sub _get_search_terms {
     my ( $self, $swish, $results, $keywords ) = @_;
+    my @phrases = ();
+    my %terms      = ();
 
-    if($keywords) {
-        my @phrases = ();
-
-        while ( $keywords =~ /\G\s*"([^"]+)"/g ) {
-            push( @phrases, $1 );
-        }
+    while ( $keywords =~ /\G\s*"([^"]+)"/g ) {
+        push( @phrases, $1 );
+    }
     
-        $keywords =~ s/"[^"]+?"//g;
+    $keywords =~ s/"[^"]+?"//g;
 
-        my %terms      = ();
-        my %stop_words = map { $_ => 1 } 
-                        $results->RemovedStopwords( $self->param('SWISHE_INDEX') );
-        #for some reason swish-e doesn't remove boolean operators as stop words... which
-        #is probably good so that they actually get used in the searches, but still...
-        $stop_words{$_} = 1 foreach qw(and or not);
-    
-        for my $word ( split( /\s+/, $keywords ) ) {
-            if ($word) {
-                next if $stop_words{$word};
-                $terms{$word} = 1;
-            }
+    # remove stop words from highlighting
+    # for some reason swish-e doesn't remove boolean operators as stop words... which
+    # is probably good so that they actually get used in the searches, but still...
+    my %stop_words = ();
+    foreach my $word ($results->RemovedStopwords( $self->param('SWISHE_INDEX') ), 'and', 'or', 'not') {
+        $stop_words{$word} = 1;
+    }
+    $stop_words{$_} = 1 foreach qw(and or not);
+
+    for my $word ( split( /\s+/, $keywords ) ) {
+        if ($word) {
+            next if $stop_words{$word};
+            $terms{$word} = 1;
         }
+    }
 
-        #now look at the stems of these words
-        $terms{ $swish->StemWord($_) } = 1 foreach ( keys %terms );
-        return keys %terms, @phrases;
-    } else {
-        return ()
-    };
+    #now look at the stems of these words
+    $terms{ $swish->StemWord($_) } = 1 foreach ( keys %terms );
+    return keys %terms, @phrases;
 }
 
 #create a loop of pages with the first page, at most five pages before
@@ -690,13 +653,16 @@ sub _get_paging_vars {
 
 # default template to use if the user doesn't specify one
 our $DEFAULT_TEMPLATE = <<END;
-<h2>Search <tmpl_if searched> Results</tmpl_if></h2>
+<html>
+<body>
+<h2>Search<tmpl_if searched> Results</tmpl_if></h2>
 <form><input name="rm" value="perform_search" type="hidden">
 
 <p><input id="fi_keywords" name="keywords" value="" size="50"> <input value="Search" type="submit"></p>
 
 <tmpl_if searched>
   <tmpl_if hits>
+    (Elapsed Time: <tmpl_var escape=html elapsed_time>s)
      <tmpl_if pages>
        <p> Pages: 
        <tmpl_unless first_page>
@@ -718,15 +684,18 @@ our $DEFAULT_TEMPLATE = <<END;
     <dl>
     <tmpl_loop hits>
       <dt>
-      <a href="<tmpl_var hit_path>"><tmpl_if hit_title><tmpl_var escape=html hit_title><tmpl_else><tmpl_var escape=html hit_path></tmpl_if></a>
+      <a href="<tmpl_var path>"><tmpl_if title><tmpl_var escape=html title><tmpl_else><tmpl_var escape=html path></tmpl_if></a>
       </dt>
-      <dd><tmpl_var escape=html hit_last_modified> - <tmpl_var escape=html hit_size></dd>
-      <dd><p><tmpl_var hit_description></p></dd>
+      <dd><tmpl_var escape=html last_modified> - <tmpl_var escape=html size></dd>
+      <dd><p><tmpl_var description></p></dd>
     </tmpl_loop>
     </dl>
 </tmpl_if></tmpl_if>
 
 <tmpl_if searched><tmpl_unless hits><p>No Results Found.</p></tmpl_unless></tmpl_if>
+</body>
+</html>
+
 END
 
 1;
@@ -758,7 +727,7 @@ A boolean indicating whether or not a search was performed.
 
 =item * keywords
 
-The exact string that was returned to the server from the input named 'keywords'
+The exact string that was recieved by the server from the input named 'keywords'
 
 =item * elapsed_time
 
@@ -767,11 +736,63 @@ be a floating point number with a precision of 3.
 
 =item * hits
 
-This is the TMPL_LOOP that contains the actuall results from the search.
+This is an array of hashs (TMPL_LOOP in H::T) that contains one entry for
+each result returned (for the current page). Each entry contains the following keys:
+
+=over 8
+
+=item reccount 
+
+The C<swishreccount> property of the results as indexed by SWISH-E
+
+=item rank
+
+The rank to the result as given by SWISH-E (the C<swishrank> property)
+
+=item title
+
+The C<swishtitle> property of the results as indexed by SWISH-E
+
+=item path
+
+The C<swishdocpath> property of the results as indexed by SWISH-E
+
+=item last_modified
+
+The C<swishlastmodified> property of the results as indexed by SWISH-E
+and then formatted using Time::Piece::strftime with a format string of
+C<%B %d, %Y>.
+
+=item size
+
+The C<swishdocsize> property of the results as indexed by SWISH-E and
+then formatted with Number::Format::format_bytes
+
+=item description
+
+The C<swishdescription> property of the results as indexed by SWISH-E. If
+L<HIGHLIGHT_CONTEXT> is true, then this description will also have search
+terms highlighted and will only be, at most, L<CONTEXT_LENGTH> characters
+long.
+
+=back
 
 =item * pages
 
-This is the TMPL_LOOP that contains paging information for the results
+This is an array of hashes (TMPL_LOOP in H::T) that contains paging information 
+for the results. It contains the following keys:
+
+=over 8
+
+=item current
+
+A boolean indicating whether or not this iteration is the current page or not.
+
+=item page_num
+
+The integer number of the page.
+
+=back
 
 =item * first_page
 
@@ -780,6 +801,14 @@ This is a boolean indicating whether or not this page of the results is the firs
 =item * last_page
 
 This is a boolean indicating whether or not this page of the results is the last or not.
+
+=item * prev_page
+
+The integer number of the previous page. Will be 0 if there is no previous page.
+
+=item * next_page
+
+The integer number of the next page. Will be 0 if there is no next page.
 
 =item * start_num
 
@@ -792,48 +821,6 @@ This is the number of the last result on the current page
 =item * total_entries
 
 The total number of results in their search, not the total number shown on the page.
-
-=back
-
-=head2 HITS TMPL_LOOP Vars
-
-These variables are available only inside of the TMPL_LOOP named "HITS".
-
-=over 8
-
-=item * hit_reccount
-
-The C<swishreccount> property of the results as indexed by SWISH-E
-
-=item * hit_rank
-
-The rank to the result as given by SWISH-E (the C<swishrank> property)
-
-=item * hit_title
-
-The C<swishtitle> property of the results as indexed by SWISH-E
-
-=item * hit_path
-
-The C<swishdocpath> property of the results as indexed by SWISH-E
-
-=item * hit_size
-
-The C<swishdocsize> property of the results as indexed by SWISH-E and
-then formatted with Number::Format::format_bytes
-
-=item * hit_description
-
-The C<swishdescription> property of the results as indexed by SWISH-E. If
-L<HIGHLIGHT_CONTEXT> is true, then this description will also have search
-terms highlighted and will only be, at most, L<CONTEXT_LENGTH> characters
-long.
-
-=item * hit_last_modified
-
-The C<swishlastmodified> property of the results as indexed by SWISH-E
-and then formatted using Time::Piece::strftime with a format string of
-C<%B %d, %Y>.
 
 =back
 

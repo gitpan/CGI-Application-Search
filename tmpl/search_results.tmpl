@@ -20,17 +20,17 @@
 </form>
 
 <tmpl_if searched>
-  (Elapsed Time: <tmpl_var escape=html elapsed_time>s)
   <tmpl_if hits>
+    (Elapsed Time: <tmpl_var escape=html elapsed_time>s)
     <tmpl_include results_nav.tmpl>
 
     <dl>
     <tmpl_loop hits>
       <dt>
-      <a href="<tmpl_var hit_path>"><tmpl_if hit_title><tmpl_var escape=html hit_title><tmpl_else><tmpl_var escape=html hit_path></tmpl_if></a>
+      <a href="<tmpl_var path>"><tmpl_if title><tmpl_var escape=html title><tmpl_else><tmpl_var escape=html path></tmpl_if></a>
       </dt>
-      <dd><tmpl_var escape=html hit_last_modified> - <tmpl_var escape=html hit_size></dd>
-      <dd><p><tmpl_var hit_description></p></dd>
+      <dd><tmpl_var escape=html last_modified> - <tmpl_var escape=html size></dd>
+      <dd><p><tmpl_var description></p></dd>
     </tmpl_loop>
     </dl>
 

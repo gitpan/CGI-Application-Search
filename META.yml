@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name: CGI-Application-Search
-version: 0.03
+version: 0.04
 author:
   - Michael Peters <mpeters@plusthree.com>
 abstract: Base class for CGI::App Swish-e site engines
