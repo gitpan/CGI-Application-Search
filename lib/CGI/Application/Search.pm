@@ -5,7 +5,6 @@ use Carp;
 use base 'CGI::Application';
 
 use CGI::Application::Plugin::AnyTemplate;
-use Text::Context;
 use Data::Page;
 use File::Spec::Functions qw(catfile);
 use Number::Format qw(format_bytes format_number);
@@ -13,8 +12,10 @@ use HTML::FillInForm;
 use Time::HiRes;
 use Time::Piece;
 use POSIX;
+use HTML::HiLiter;
+use Text::Context;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 our $DEBUG;
 
 # load SWISH::API and complain if not available.  This is done here
@@ -38,25 +39,25 @@ CGI::Application::Search - Base class for CGI::App Swish-e site engines
 
 =head1 SYNOPSIS
 
-	package My::Search;
-	use base 'CGI::Application::Search';
+    package My::Search;
+    use base 'CGI::Application::Search';
 	
-	sub cgiapp_init {
-	  my $self = shift;
-	  $self->param(
-        'SWISHE_INDEX' => 'my-swishe.index',
-        'TEMPLATE'     => 'search_results.tmpl',
-      );
-	}
+    sub cgiapp_init {
+        my $self = shift;
+        $self->param(
+            'SWISHE_INDEX' => 'my-swishe.index',
+            'TEMPLATE'     => 'search_results.tmpl',
+        );
+    }
 
-	#let the user turn context highlighting off
-	sub cgiapp_prerun {
-	  my $self = shift;
-	  $self->param('HIGHLIGHT_CONTEXT' => 0)
-		if($self->query->param('highlight_off'));
-	}
+    #let the user turn context highlighting off
+    sub cgiapp_prerun {
+        my $self = shift;
+        $self->param('HIGHLIGHT' => 0)
+            if($self->query->param('highlight_off'));
+    }
 
-	1;
+    1;
 
 =head1 DESCRIPTION
 
@@ -196,9 +197,9 @@ the results.
 =item * perform_search
 
 This run mode will actually use the SWISH::API module to perform the search on a given index. If
-the L<HIGHLIGHT_CONTEXT> option is set is will then use L<Text::Context> to obtain a suitable 
+the L<HIGHLIGHT> option is set is will then use L<Text::Context> to obtain a suitable 
 context of the search content for each result returned and highlight the text according to the
-L<HIGHLIGHT_START> and L<HIGHLIGHT_STOP> options.
+L<HIGHLIGHT_TAG>, L<HIGHLIGHT_CLASS> and L<HIGHLIGHT_COLORS> options.
 
 =back
 
@@ -249,10 +250,11 @@ sub _my_prerun {
     my %defaults = (
         SWISHE_INDEX        => catfile( 'data', 'swish-e.index' ),
         PER_PAGE            => 10,
-        HIGHLIGHT_CONTEXT   => 1,
-        HIGHLIGHT_START     => q(<strong>),
-        HIGHLIGHT_STOP      => q(</strong>),
-        CONTEXT_LENGTH      => 250,
+        HIGHLIGHT           => 1,
+        HIGHLIGHT_TAG       => q(strong),
+        HIGHLIGHT_CLASS     => '',
+        HIGHLIGHT_COLORS    => [],
+        DESCRIPTION_LENGTH  => 250,
         TEMPLATE_TYPE       => 'HTMLTemplate',
         TEMPLATE_CONFIG     => undef,
     );
@@ -368,21 +370,26 @@ params to C<< $self->template->config >>.
 
 How many search result items to display per page. The default is 10.
 
-=head2 HIGHLIGHT_CONTEXT
+=head2 HIGHLIGHT
 
-Boolean indicating whether or not we should highlight the context. The default is true.
+Boolean indicating whether or not we should highlight the description given to the
+templates. The default is true.
 
-=head2 HIGHLIGHT_START
+=head2 HIGHLIGHT_TAG
 
-The text to be prepended to a word being highlighted. If this value is false
-and L<HIGHTLIGHT_CONTEXT> is true then it will use the default provided by
-L<Text::Context>. The default text is C<<lt>strong<gt>>.
+The tag used to surround the highlighted context. The default is C<< strong >>.
 
-=head2 HIGHLIGHT_STOP
+=head2 HIGHLIGHT_CLASS
 
-The text to be appended to a word being highlighted. If this value is false
-and L<HIGHTLIGHT_CONTEXT> is true then it will use the default provided by
-L<Text::Context>. The default text is C<<lt>/strong<gt>>.
+The class attribute of the HIGHLIGHT_TAG HTML tag. This is useful when you
+want to dictacte the style through a CSS style sheet. If given, this value
+will override that of HIGHLIGHT_COLORS. By default it is C<< '' >> (an empty string).
+
+=head2 HIGHLIGHT_COLORS
+
+This is an array ref of acceptable HTML colors. If provided, it will highlight each
+matching word/phrase in an alternating style. For instance, if given 2 colors, every
+other highlighted phrase would be a different color. By default it is an empty array.
 
 =head2 EXTRA_PROPERTIES
 
@@ -402,10 +409,16 @@ documentation).
 
 The default is an empty list.
 
-=head2 CONTEXT_LENGTH
+=head2 DESCRIPTION_LENGTH
 
 This is the maximum length for the context (in chars) that is displayed for each
 search result. The default is 250 characters.
+
+=head2 DESCRIPTION_CONTEXT
+
+This is the number of words on either side of the searched for words and phrases
+(keywords) that will be displayed as part of the description. If this is 0, then
+the entire description will be displayed. The default is 0. 
 
 =cut
 
@@ -463,7 +476,7 @@ sub show_search {
 This is where the meat of the searching is performed. We create a L<SWISH::API>
 object on the L<SWISHE_INDEX> and create the query for the search based on the
 value of the 'keywords' parameter in CGI and any other L<EXTRA_PARAMETERS>. The search
-is executed and if L<HIGHLIGHT_CONTEXT> is true we will use Text::Context to highlight
+is executed and if L<HIGHLIGHT> is true we will use Text::Context to highlight
 it and then format the results data only showing L<PER_PAGE> number of elements per page
 (if L<PER_PAGE> is true). We will also show a list of pages that can be selected for navigating
 through the results. Then we will return to the L<show_search()> method for displaying.
@@ -506,7 +519,7 @@ sub perform_search {
             #create my pager and then go to the start page
             $self->_get_paging_vars($results);
             my @words = $self->_get_search_terms( $swish, $results, $keywords );
-            $self->param( 'hits' => $self->_process_results( $results, @words ) );
+            $self->param( 'hits' => $self->_process_results( $swish, $results, $search_query ) );
         } else {
             return $self->show_search();
         }
@@ -524,56 +537,71 @@ sub perform_search {
 
 #-------------------------PRIVATE METHODS-----------------------
 sub _process_results {
-    my ( $self, $results, @keywords ) = @_;
+    my ( $self, $swish, $results, $search_query ) = @_;
 
-    #now let's go through the results and build our loop
+    # now let's go through the results and build our loop
     my @result_loop = ();
     my $count       = 0;
 
-    #while we still have more results
+    # while we still have more results
     while ( my $current = $results->NextResult ) {
         my %tmp = (
-          reccount => $current->Property('swishreccount'),
-          rank     => $current->Property('swishrank'),
-          title    => $current->Property('swishtitle'),
-          path     => $current->Property('swishdocpath'),
-          size     => format_bytes( $current->Property('swishdocsize') ),
-          description   => $current->Property('swishdescription'),
+          reccount      => $current->Property('swishreccount'),
+          rank          => $current->Property('swishrank'),
+          title         => $current->Property('swishtitle'),
+          path          => $current->Property('swishdocpath'),
+          size          => format_bytes( $current->Property('swishdocsize') ),
+          description   => $current->Property('swishdescription') || '',
           last_modified => localtime($current->Property('swishlastmodified'))->strftime('%B %d, %Y'),
         );
 
-        #now add any EXTRA_PROPERTIES that we want to show
+        # now add any EXTRA_PROPERTIES that we want to show
         if ( $self->param('EXTRA_PROPERTIES') ) {
             $tmp{$_} = eval { $current->Property($_) }
               foreach ( @{ $self->param('EXTRA_PROPERTIES') } );
         }
 
-        #if we want to highlight the description
-        if ( $self->param('HIGHLIGHT_CONTEXT') ) {
-            my $content = $tmp{description} || '';
-            if( $content ) {
-                #now get the context
-                my $context = Text::Context->new( $content, @keywords );
-                $context = $context->as_html(
-                    start   => $self->param('HIGHLIGHT_START'),
-                    end     => $self->param('HIGHLIGHT_STOP'),
-                    max_len => $self->param('CONTEXT_LENGTH'),
-                );
-                if( $context ) {
-                    $tmp{description} = $context;
-                } else {
-                    $tmp{description} = substr( $content, 0, $self->param('CONTEXT_LENGTH') );
+        my $description = $tmp{description};
+        if( $description ) {
+            # if we want to zero in on the context
+            if( $self->param('DESCRIPTION_CONTEXT') ) {
+                # get the keywords from the swish search
+                my @keywords = ();
+                foreach my $kw ($results->ParsedWords($self->param('SWISHE_INDEX')) ) {
+                    # remove boolean operators 'and', 'or' and 'not'
+                    my $lc_kw = lc($kw);
+                    if( $lc_kw ne 'and' && $lc_kw ne 'or' && $lc_kw ne 'not' ) {
+                        push(@keywords, $kw);
+                    }
                 }
+                # now get the context
+                my $context = Text::Context->new(
+                    $description,
+                    @keywords,
+                );
+                $description = $context->as_text();
             }
-        }
 
-        elsif( $tmp{description} ) {
-            #else we aren't highlighting, but we still want the content to be the right length
-            $tmp{description} = substr( $tmp{description}, 0, $self->param('CONTEXT_LENGTH') );
+            # if we want to highlight the description 
+            if ( $self->param('HIGHLIGHT') ) {
+                my $hi_liter = HTML::HiLiter->new(
+                    HiTag   => $self->param('HIGHLIGHT_TAG'),
+                    HiClass => $self->param('HIGHLIGHT_CLASS'),
+                    Colors  => $self->param('HIGHLIGHT_COLORS'),
+                    SWISH   => $swish,
+                    Parser  => 0,
+                );
+                $hi_liter->Queries($search_query);
+                $hi_liter->Inline();
+                $description = $hi_liter->plaintext($description);
+            }
+
+            # now make sure it's the appropriate length
+            $tmp{description} = substr( $description, 0, $self->param('DESCRIPTION_LENGTH') );
         }
         push( @result_loop, \%tmp );
 
-        #only go as far as the number per page
+        # only go as far as the number per page
         ++$count;
         last if ( $count == $self->param('PER_PAGE') );
     }
@@ -771,8 +799,8 @@ then formatted with Number::Format::format_bytes
 =item description
 
 The C<swishdescription> property of the results as indexed by SWISH-E. If
-L<HIGHLIGHT_CONTEXT> is true, then this description will also have search
-terms highlighted and will only be, at most, L<CONTEXT_LENGTH> characters
+L<HIGHLIGHT> is true, then this description will also have search
+terms highlighted and will only be, at most, L<DESCRIPTION_LENGTH> characters
 long.
 
 =back

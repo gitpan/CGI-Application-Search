@@ -8,16 +8,16 @@ WriteMakefile
           'VERSION_FROM' => 'lib/CGI/Application/Search.pm',
           'PREREQ_PM' => {
                            'SWISH::API' => '0.01',
-                           'Time::Piece' => '0',
-                           'Number::Format' => '0',
-                           'Time::HiRes' => '0',
-                           'Data::Page' => '1.0',
+                           'Time::Piece' => 0,
+                           'Number::Format' => 0,
+                           'Time::HiRes' => 0,
+                           'Data::Page' => '1',
                            'CGI::Application' => '3.2',
-                           'Text::Context::EitherSide' => '1.1',
-                           'POSIX' => '0',
+                           'POSIX' => 0,
                            'HTML::FillInForm' => '1.04',
+                           'HTML::HiLiter' => '0.12',
                            'CGI::Application::Plugin::AnyTemplate' => 0,
-                           'File::Spec::Functions' => '0',
+                           'File::Spec::Functions' => 0,
                            'Text::Context' => '3.5'
                          }
         )

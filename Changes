@@ -1,5 +1,14 @@
 Revision history for Perl extension CGI::Application::Dispatch.
 
+0.05 (Jul 10, 2005)
+    - renamed 'HIGHLIGHT_CONTEXT' to just 'HIGHLIGHT'
+    - removed 'HIGHLIGT_STOP' and 'HIGHLIGHT_START' in favor of
+        'HIGHLIGHT_TAG' and 'HIGHLIGHT_CLASS' and 'HIGHLIGHT_COLORS'
+    - renamed 'CONTEXT_LENGTH' to 'DESCRIPTION_LENGTH'
+    - default highlighting is now done with HTML::HiLiter (much faster)
+    - DESCRIPTION_CONTEXT added so that highlighting is now independent of
+        finding a matching 'context' inside the description
+
 0.04 (Jul 08, 2005)
     - removed 'hit_' prefix from all vars in in the 'hits' loop for templates
     - almost 100% test coverage (99.6%)
