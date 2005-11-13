@@ -1,5 +1,19 @@
 Revision history for Perl extension CGI::Application::Dispatch.
 
+0.06 ()
+    - added AJAX flag to turn on non-refresh searches
+    - added AUTO_SUGGEST, AUTO_SUGGEST_FILE, AUTO_SUGGEST_CACHE and AUTO_SUGGEST_LIMIT
+        functionality
+    - minor doc fixes
+    - fixed mispelling of 'global_var' => 'global_vars' in HTML::Template
+        options
+    - removed use of callbacks since they didn't really add anything
+        and required newer versions of C::A
+    - better and more complete sample templates that are installed with
+        the application and useable when no others are provided.
+    - split tutorial out into a separate file and include some setup
+        info for AJAX usage.
+
 0.05 (Jul 10, 2005)
     - renamed 'HIGHLIGHT_CONTEXT' to just 'HIGHLIGHT'
     - removed 'HIGHLIGT_STOP' and 'HIGHLIGHT_START' in favor of

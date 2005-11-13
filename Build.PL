@@ -1,22 +1,32 @@
 use Module::Build;
-my $build = Module::Build->new (
-        module_name => 'CGI::Application::Search',
-        license => 'perl',
-        requires => {
-            'perl'                                  => '5.6.1',
-            'CGI::Application'                      => 3.2,
-            'CGI::Application::Plugin::AnyTemplate' => 0,
-            'SWISH::API'                            => 0.01,
-            'HTML::HiLiter'                         => 0.12,
-            'Data::Page'                            => 1.0,
-            'File::Spec::Functions'                 => 0,
-            'Number::Format'                        => 0,
-            'HTML::FillInForm'                      => 1.04,
-            'Time::HiRes'                           => 0,
-            'Time::Piece'                           => 0,
-            'POSIX'                                 => 0,
-            'Text::Context'                         => 3.5,
-        },
-        create_makefile_pl => 'traditional',
-   );
-$build->create_build_script;
+use lib './t/lib';
+Module::Build->new(
+    module_name => 'CGI::Application::Search',
+    license => 'perl',
+    requires => {
+        'perl'                                    => '5.6.1',
+        'CGI::Application'                        => 3.2,
+        'CGI::Application::Plugin::AnyTemplate'   => 0,
+        'CGI::Application::Plugin::HTMLPrototype' => 0,
+        'SWISH::API'                              => 0.01,
+        'HTML::HiLiter'                           => 0.12,
+        'Data::Page'                              => 1.0,
+        'File::Spec::Functions'                   => 0,
+        'Number::Format'                          => 0,
+        'HTML::FillInForm'                        => 1.04,
+        'Time::HiRes'                             => 0,
+        'Time::Piece'                             => 0,
+        'POSIX'                                   => 0,
+        'Text::Context'                           => 3.5,
+        'File::Spec'                              => 0,
+    },
+    create_makefile_pl => 'traditional',
+    pm_files => {
+        'lib/CGI/Application/Search.pm'      => 'lib/CGI/Application/Search.pm',
+        'templates/search_results.tmpl'      => 'lib/CGI/Application/Search/templates/search_results.tmpl',
+        'templates/search_results.tt'        => 'lib/CGI/Application/Search/templates/search_results.tt',
+        'templates/ajax_search_results.tmpl' => 'lib/CGI/Application/Search/templates/ajax_search_results.tmpl',
+        'templates/ajax_search_results.tt'   => 'lib/CGI/Application/Search/templates/ajax_search_results.tt',
+        'templates/prototype_javascript.tmpl'=> 'lib/CGI/Application/Search/templates/prototype_javascript.tmpl',
+    },
+)->create_build_script();

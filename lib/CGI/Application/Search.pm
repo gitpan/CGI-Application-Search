@@ -5,8 +5,9 @@ use Carp;
 use base 'CGI::Application';
 
 use CGI::Application::Plugin::AnyTemplate;
+use CGI::Application::Plugin::HTMLPrototype;
 use Data::Page;
-use File::Spec::Functions qw(catfile);
+use File::Spec::Functions qw(catfile splitpath catdir);
 use Number::Format qw(format_bytes format_number);
 use HTML::FillInForm;
 use Time::HiRes;
@@ -15,8 +16,13 @@ use POSIX;
 use HTML::HiLiter;
 use Text::Context;
 
-our $VERSION = '0.05';
-our $DEBUG;
+our $VERSION = '0.06';
+our (
+    $DEBUG,                         # a debug flag
+    @SUGGEST_CACHE,                 # cached suggestions
+    $SUGGEST_CACHE_TIME             # time of the last cache
+);  
+$SUGGEST_CACHE_TIME = 0;
 
 # load SWISH::API and complain if not available.  This is done here
 # and not in Makefile.PL because SWISH::API is not on CPAN.  It's part
@@ -67,141 +73,259 @@ of documents. It uses L<HTML::Template> to display the search form and
 the results.  You may customize this template to alter the look and
 feel of the generated search interface.
 
+=head2 Features
+
+=over
+
+=item Built-in templates to use out of box or as examples for your own usage
+
+=item HiLighted search results
+
+=item HiLighted pages linked from search results
+
+=item AJAX results sent to page without need of a page reload
+
+=item AJAX powered 'auto-suggest' to give the user list of choices available 
+for search 
+
+=back
+
 =head1 TUTORIAL
 
-You can skip this section if you're a Swish-e veteren.  Otherwise,
-read on for a step-by-step guide to adding a search interface to your
-site using CGI::Application::Search.
-
-=head2 Step 1: Install Swish-e
-
-The first thing you need to do is install Swish-e.  First, download it
-from the swish-e site:
-
-   http://swish-e.org
-
-Then unpack it, cd into the directory, build and install:
-
-  tar zxf swish-e-2.4.3.tar.gz
-  cd swish-e-2.4.3
-  ./configure
-  make
-  make install
-
-You'll also need to build the Perl module, SWISH::API, which this
-module uses:
-
-  cd perl
-  perl Makefile.PL
-  make
-  make install
-
-=head2 Step 2: Setup a Config File
-
-The first step to setting up a swish-e search engine is writing a
-config file.  Swish-e supports a smorgasborg of configuration options
-but just a few will get you started.
-
-  # index all HTML files in /path/to/index
-  IndexDir /path/to/index
-  IndexOnly .html .htm
-  IndexContents HTML2 .html .htm
-
-  # C::A::Search needs a description, use the first 1,500 characters
-  # of the body
-  StoreDescription HTML2 <body> 1500
-
-  # remove doc-root path so links will work on the results page
-  ReplaceRules remove /path/to/index
-
-Put the above in a file called F<swish-e.conf>.
-
-NOTE: The above is a very simple swish-e.conf file. To bask in the
-power and flexibility that is swish-e, please see the official documentation. 
-
-=head2 Step 3: Run the Indexer
-
-Now that you've got a basic configuration file you can index your site.  
-The corresponding simple command is:
-
-  $ swish-e -v 1 -c swish-e.conf -f /path/to/swishe-index
-
-The last part is the place where Swish-e will write its index.  It
-should be the name of a file in a directory writable by you and
-readable by your CGI scripts.
-
-Later you'll need to setup the indexer to run from cron, but for now
-just run it once.
-
-=head2 Step 4: Run a Test Search
-
-Swish-e has a command-line interface to running searches which you can
-use to confirm that your index is working.  For example, to search for
-"foo":
-
-  $ swish-e -w foo -f /path/to/swishe-index
-
-If that works you should see some hits (assuming your site contains
-"foo").
-
-=head2 Step 5: Setup an Instance Script
-
-Like all CGI::Application modules, CGI::Application::Search requires
-an instance script.  Create a file called 'search.pl' or 'search.cgi'
-in a place where your web server will execute it.  Put this in it:
-
-  #!/usr/bin/perl -w
-  use strict;
-  use CGI::Application::Search;
-  my $app = CGI::Application::Search->new(
-    PARAMS => { SWISHE_INDEX => '/path/to/index' }
-  );
-  $app->run();
-
-Now make it executable:
-
-  $ chmod +x search.pl
-
-=head2 Step 6: Test Your Instance Script
-
-First, test it on the command-line:
-
-  $ ./search.pl
-
-That should show you the HTML for the search form with no results.
-Now try it in your browser:
-
-  http://yoursite.example.com/search.pl
-
-If that doesn't work, check your error log.  Do not email me or the
-CGI::Application mailing list until you check your error log.  Yes, I
-mean you. Thanks.
-
-=head2 Step 7: Rejoice
-
-You've just completed the world's easiest search system setup!  Now go
-setup that indexing cronjob.
+If this is your first time using Swish-e, or you think you need a refresher
+or if you want step-by-step instructions to use the AJAX capabilities
+of this module, then please see L<CGI::Application::Search::Tutorial>. 
 
 =head1 RUN_MODES
 
-This controller has two run modes. The start_mode is L<show_search>.
+The start_mode is L<show_search> and these are the other available
+run modes:
 
-=over 8
+=head2 show_search()
 
-=item * show_search
+This method will load the template pointed to by the C<TEMPLATE> param
+(falling back on a default internal template if none is configured)
+and display it to the user.  It will 'associate' this template with
+$self so that any parameters in $self->param() are also accessible to
+the template. It will also use L<HTML::FillInForm> to fill in the
+search form with the previously selected parameters.
 
-This run mode will show the simple search form. If there are any results they will also be displayed.
-This is the default run mode and after a search is performed, this run mode is called to display
-the results.
+=cut 
 
-=item * perform_search
+sub show_search {
+    my $self = shift;
+    my $query = $self->query();
 
-This run mode will actually use the SWISH::API module to perform the search on a given index. If
-the L<HIGHLIGHT> option is set is will then use L<Text::Context> to obtain a suitable 
-context of the search content for each result returned and highlight the text according to the
-L<HIGHLIGHT_TAG>, L<HIGHLIGHT_CLASS> and L<HIGHLIGHT_COLORS> options.
+    my $tmpl_file;
+    # if we have a user specified template 
+    if ( $self->param('TEMPLATE') ) {
+        $tmpl_file = $self->param('TEMPLATE');
 
-=back
+    # else fall back to a default template
+    } else {
+        # what type of template do we want?
+        my $ext = $self->param('TEMPLATE_TYPE') eq 'TemplateToolkit'
+            ? '.tt'  : '.tmpl';
+        # is it an AJAX template?
+        $tmpl_file = ( $self->param('AJAX') ? 'ajax_' : '')
+            . "search_results$ext";
+        $tmpl_file = catfile(
+            $self->param('DEFAULT_TEMPLATE_PATH'),
+            $tmpl_file
+        );
+    }
+    my $tmpl = $self->template->load($tmpl_file);
+
+    # give it all the stuff in $self
+    my %tmpl_params = (
+        self => $self
+    );
+    foreach my $param qw(
+        searched elapsed_time keywords hits first_page 
+        last_page prev_page next_page pages start_num 
+        stop_num total_entries
+    ) {
+        $tmpl->param( $param => $self->param($param) )
+            if( $self->param($param) );
+    }
+    $tmpl->param(%tmpl_params);
+
+    # add this url to the template too
+    $tmpl->param( url => $query->url(-absolute => 1));
+    # add the possible ajax flag
+    $tmpl->param( ajax => $query->param('ajax') );
+
+    my $output = $tmpl->output();
+
+    # don't use FiF if we are using AJAX
+    unless ( $self->param('AJAX') && $query->param('ajax') ) {
+        my $filler = HTML::FillInForm->new();
+        $output = $filler->fill( 
+            scalarref   => ref( $output ) ? $output : \$output,
+            fobject     => $query, 
+        );
+    }
+    return $output;
+}
+
+=head2 perform_search()
+
+This is where the meat of the searching is performed. We create a L<SWISH::API>
+object on the L<SWISHE_INDEX> and create the query for the search based on the
+value of the 'keywords' parameter in CGI and any other L<EXTRA_PARAMETERS>. The search
+is executed and if L<HIGHLIGHT> is true we will use Text::Context to highlight
+it and then format the results data only showing L<PER_PAGE> number of elements per page
+(if L<PER_PAGE> is true). We will also show a list of pages that can be selected for navigating
+through the results. Then we will return to the L<show_search()> method for displaying.
+
+=cut
+
+sub perform_search {
+    my $self = shift;
+    my $query = $self->query;
+
+    #if we have any keywords
+    my $keywords = $self->query->param('keywords');
+    if ( defined $keywords && !$self->param('results') ) {
+        my $index = $self->param('SWISHE_INDEX');
+        # make sure the index exists and is readable
+        croak "Index file $index does not exist!"
+            unless( -e $index );
+
+        $self->param( 'searched' => 1 );
+        my $start_time = Time::HiRes::time();
+
+        #create my swish-e object
+        my $swish = SWISH::API->new( $index );
+        croak "Problem reading $index : " . $swish->ErrorString
+            if ( $swish->Error );
+
+        my $search_query = $self->generate_search_query($keywords);
+        # if we got one
+        if( defined $search_query ) {
+
+            my $results = $swish->Query($search_query);
+            if ( $swish->Error ) {
+                carp "Unable to create query: " .  $swish->ErrorString
+                    if( $DEBUG );
+                return $self->show_search();
+            }
+
+            $self->param( 'elapsed_time' => format_number( Time::HiRes::time - $start_time, 3, 1 ) );
+
+            #create my pager and then go to the start page
+            $self->_get_paging_vars($results);
+            my @words = $self->_get_search_terms( $swish, $results, $keywords );
+            $self->param( 'hits' => $self->_process_results( $swish, $results, $search_query ) );
+        } else {
+            return $self->show_search();
+        }
+    }
+
+    # if there are any extra properties used in the search, make them available to
+    # the templates with the value in the query object
+    foreach my $prop ( @{$self->param('EXTRA_PROPERTIES') || []} ) {
+        $self->param($prop => $query->param($prop));
+    } 
+    $self->param( 'keywords' => $keywords );
+    return $self->show_search();
+}
+
+=head2 highlight_remote_page
+
+This run mode will fetch a remote page (with either a fullrelative, or absolute URL using the C<url>
+Query param) and highlight the keywords used in the search on that page (the C<keywords> Query
+param) using the <HIGHLIGHT_TAG>, L<HIGHLIGHT_CLASS> or L<HIGHLIGHT_COLORS> options. This run 
+mode is best used in the links of the search results listing.
+
+    <a href="?rm=highlight_remote_page;url=http%3A%2F%2Fexample.com%2Fabout_us%2Findex.html;keywords=Us">about us</a>
+
+=cut
+
+sub highlight_remote_page {
+    my $self = shift;
+    my $query = $self->query();
+    my $url = $query->param('url');
+    
+    # if it's relative, get the hostname and make it absolute
+    if( $url !~ /^https?:\/\// ) {
+        $url = $query->url(-base => 1) . $url;
+    }
+    return $self->_hilight_page($url);
+}
+
+sub _hilight_page {
+    my ($self, $page) = @_;
+
+    my $hl = HTML::HiLiter->new(
+        HiTag   => $self->param('HIGHLIGHT_TAG'),
+        HiClass => $self->param('HIGHLIGHT_CLASS'),
+        Colors  => $self->param('HIGHLIGHT_COLORS'),
+        Print   => 0,
+        Parser  => 0,
+    );
+
+    $hl->Queries( $self->query->param('keywords') );
+    $hl->Inline();
+    
+    return $hl->Run($page);
+}
+
+=head2 highlight_local_page
+
+This run mode will fetch a local page (only allowing relative files based in
+the L<DOCUMENT_ROOT> config var and the path using the C<path> Query param) 
+and highlight the keywords used in the search on that page (the C<keywords> Query
+param) using the <HIGHLIGHT_TAG>, L<HIGHLIGHT_CLASS> or L<HIGHLIGHT_COLORS> options. This run
+mode is best used in the links of the search results listing.
+
+    <a href="?rm=highlight_local_page;path=%2Fabout_us%2Findex.html;keywords=Us">about us</a>
+
+=cut
+
+sub highlight_local_page {
+    my $self = shift;
+    my $query = $self->query();
+    my $doc_root = $self->param('DOCUMENT_ROOT');
+    my $path = $query->param('path');
+    
+    if( !$doc_root ) {
+        croak "You must define your DOCUMENT_ROOT to use this run mode!";
+    }
+
+    # make sure $path doesn't have any '/..' tricks in it
+    $path =~ s/\/\.\.//g;
+    
+    my $file = catfile( 
+        $doc_root,
+        $path
+    ); 
+    return $self->_hilight_page($file);
+}
+
+
+=head2 suggestions
+
+This run mode will return an AJAX listing of words that should be suggested to the user for the
+words that they have typed so far. It uses the L<suggested_words> method to actually choose what
+words to send back.
+
+=cut
+
+sub suggestions {
+    my $self = shift;
+
+    if( $self->param('AJAX') && $self->param('AUTO_SUGGEST') ) {
+        return $self->prototype->auto_complete_result(
+            $self->suggested_words(
+                $self->query->param('keywords')
+            )
+        );
+    } else {
+        return $self->prototype->auto_complete_result([]);
+    }
+}
+
 
 =head1 OTHER METHODS
 
@@ -211,40 +335,15 @@ to override or extend these methods in your derived class.
 
 =head2 new()
 
-We simply override and extend the L<CGI::Application> new() constructor
-to also setup our callbacks.
+We simply override and extend the L<CGI::Application> new() to setup
+our defaults.
 
 =cut
 
 sub new {
     my $class = shift;
-    $class->add_callback(init => \&_my_init);
+
     my $self = $class->SUPER::new(@_);
-    $class->add_callback(prerun => \&_my_prerun);
-    return $self;
-}
-
-=head2 setup()
-
-A simple no-op sub that you are free to override to run at setup time
-
-=cut
-
-# no-op to get around C::A setting the start_mode() in setup() and new().
-sub setup { }
-
-
-sub _my_init {
-    my $self = shift;
-    $self->start_mode('show_search');
-    $self->run_modes(
-        show_search    => 'show_search',
-        perform_search => 'perform_search',
-    );
-}
-
-sub _my_prerun {
-    my $self = shift;
 
     # setup my defaults
     my %defaults = (
@@ -264,22 +363,30 @@ sub _my_prerun {
     }
 
     # setup the template configs
+    my $path = catdir(
+        (splitpath($INC{'CGI/Application/Search.pm'}))[1],
+        'Search',
+        'templates',
+    );
+    $self->param('DEFAULT_TEMPLATE_PATH' => $path);
     my %tmpl_config = (
         default_type                => $self->param('TEMPLATE_TYPE'),
         auto_add_template_extension => 0,
-        include_paths               => [ $self->tmpl_path ],
+        include_paths               => [ $self->tmpl_path, $path ],
         HTMLTemplate                => {
-            global_var          => 1,
+            global_vars         => 1,
             loop_context_vars   => 1,
             die_on_bad_params   => 0,
         },
         HTMLTemplateExpr            => {
-            global_var          => 1,
+            global_vars         => 1,
             loop_context_vars   => 1,
             die_on_bad_params   => 0,
         },
         TemplateToolkit             => {
-            INCLUDE_PATH        => $self->tmpl_path(),
+            ABSOLUTE            => 1,
+            DEBUG_PROVIDER      => 1,
+            DEBUG               => 1,
         },
     );
     
@@ -291,9 +398,35 @@ sub _my_prerun {
         };
     }
     $self->template->config(%tmpl_config);
+    return $self;
 }
 
-=head1 RUN MODES
+=head2 setup()
+
+Here's were we setup our run modes. If you override this method,
+make sure you also call it in your base class
+
+    sub setup {
+        my $self = shift;
+        # do your thing
+        ...
+        $self->SUPER::setup();
+    }
+
+=cut
+
+sub setup {
+    my $self = shift;
+    $self->start_mode('show_search');
+    $self->run_modes([qw(
+        show_search
+        perform_search
+        highlight_remote_page
+        highlight_local_page
+        suggestions
+    )]);
+}
+
 
 =head2 generate_search_query($keywords)
 
@@ -329,17 +462,136 @@ sub generate_search_query {
     return $query;
 }
 
+=head2 suggested_words($word)
+
+This object method is used by the L<AUTO_SUGGEST> flag to return the words
+that should be suggested to the user after they have typed a C<$word>.
+It returns an array reference of those words.
+
+By default it will just look for words in the L<AUTO_SUGGEST_FILE> that
+begin with C<$word>. If you need more performance or flexibility (eg,
+storing your words in a database and querying for them) you are encouraged
+to override this method.
+
+=cut
+
+sub suggested_words {
+    my ($self, $phrase) = @_;
+    # just get the last word in this phrase
+    my @phrase_words = split(/\s+/, $phrase);
+    my $word = pop(@phrase_words);
+
+    my $want_to_cache = $self->param('AUTO_SUGGEST_CACHE');
+    my $file = $self->param('AUTO_SUGGEST_FILE');
+    my @suggestions;
+
+    unless( -r $file ) {
+        warn "AUTO_SUGGEST_FILE $file is not readable!";
+        return [];
+    }
+
+    # if we are going to use the cache (meaning we want to use
+    # it and there's up-to-date data in there)
+    my $file_mod_time = (stat($file))[9];
+    if( 
+        $want_to_cache                  
+        and @SUGGEST_CACHE          
+        and $SUGGEST_CACHE_TIME >= $file_mod_time 
+    ) {
+        foreach my $cached (@SUGGEST_CACHE) {
+            # if it starts with this $word
+            if( 
+                index($cached, lc $word) == 0 
+            ) {
+                push(@suggestions, $cached);
+            # else if this is the first mis-match
+            } elsif( @suggestions ) {
+                last;
+            }
+
+            # if we have a limit and we've reached it
+            # don't do any more
+            if( 
+                $self->param('AUTO_SUGGEST_LIMIT')
+                and
+                @suggestions >= $self->param('AUTO_SUGGEST_LIMIT')
+            ) {
+                last;
+            }
+        }
+    # else we don't have anything cached, so just load from the file
+    } else {
+        # reset it if we want to cache
+        if( $want_to_cache ) {
+            @SUGGEST_CACHE = ();
+            $SUGGEST_CACHE_TIME = time();
+        }
+
+        # read each line from the AUTO_SUGGEST_FILE
+        my $IN;
+        open($IN, '<', $file)
+            or die "Could not open $file for reading! $!";
+        # now look at each line
+        LINE: while( my $line = <$IN> ) {
+
+            # if we want to cache the words in this file
+            if( $want_to_cache ) {
+                chomp($line);
+                push(@SUGGEST_CACHE, $line);
+            }
+
+            # if it starts with this $word
+            if( index($line, lc $word) == 0 ) {
+                chomp($line) unless( $want_to_cache );
+                push(@suggestions, $line);
+            # else if we aren't caching, and this is the first mis-match
+            # then we want to finish and close the file
+            } elsif( @suggestions && !$want_to_cache ) {
+                last LINE;
+            }
+
+            # if we have a limit and we've reached it
+            # don't do any more
+            if( 
+                $self->param('AUTO_SUGGEST_LIMIT')
+                and
+                @suggestions >= $self->param('AUTO_SUGGEST_LIMIT')
+            ) {
+                last;
+            }
+        }
+        close($IN)
+            or die "Could not close $file! $!";
+    }
+
+    # if we have something in the phrase that's not 
+    # in the word, add the phrase before the suggestion
+    if( @phrase_words ) {
+        my $prefix = join(' ', @phrase_words);
+        @suggestions = map { "$prefix $_" } @suggestions;
+    }
+    return \@suggestions;
+}
+
 =head1 CONFIGURATION
 
 There are several configuration parameters that you can set at any 
-time (using C<< param() >> in your cgiapp_init or cgiapp_prerun, 
+time (using C<< param() >> in your cgiapp_init, 
 or PARAMS hash in new()) before the run mode is called that will 
 affect the search and display of the results. They are:
 
 =head2 SWISHE_INDEX
 
-This is the swishe index used for the searches. The default is 'data/swish-e.index'. You will probably
-override this every time.
+This is the swishe index used for the searches. The default is 'data/swish-e.index'. 
+You will probably override this every time.
+
+=head2 AJAX
+
+This is a boolean indicating whether or not AJAX capabilities will
+be permitted.
+
+Please see the L<CGI::Application::Search::Tutorial> for more information
+on how to use the AJAX capabilities of this module.
 
 =head2 TEMPLATE
 
@@ -348,8 +600,8 @@ included within the module which will be used if you don't specify
 one.  A more elaborate example is included in the distribution under
 the C<tmpl/> directory.
 
-The following parameters are passed to your template regardless of it's 
-C<< TEMPLATE_TYPE >>:
+Please see L<TEMPLATE USAGE> for more information on what variables are 
+passed into your template.
 
 =head2 TEMPLATE_TYPE
 
@@ -420,120 +672,39 @@ This is the number of words on either side of the searched for words and phrases
 (keywords) that will be displayed as part of the description. If this is 0, then
 the entire description will be displayed. The default is 0. 
 
-=cut
+B<NOTE>: This directive will cause search to perform some intensive computations
+to figure out the best piece of the description to display. These computations
+may prove to be too much for some servers (eg, a shared hosting environment).
 
-=head2 show_search()
+=head2 AUTO_SUGGEST
 
-This method will load the template pointed to by the C<TEMPLATE> param
-(falling back on a default internal template if none is configured)
-and display it to the user.  It will 'associate' this template with
-$self so that any parameters in $self->param() are also accessible to
-the template. It will also use L<HTML::FillInForm> to fill in the
-search form with the previously selected parameters.
+If the L<AJAX> flag is true, then this will allow the broswer to give suggestions
+to the user as they type. To use this, you must either use the L<AUTO_SUGGEST_FILE>
+configuration option, or override the C<suggested_words()> method.
 
-=cut 
+=head2 AUTO_SUGGEST_FILE
 
-sub show_search {
-    my $self = shift;
+The name of the file where the suggested words are stored. These words should be in
+alphabetical order with one word per line.
 
-    # load the template configured falling back to the default template
-    my $tmpl;
-    if ($self->param('TEMPLATE')) {
-        $tmpl = $self->template->load($self->param('TEMPLATE'));
-    } else {
-        our $DEFAULT_TEMPLATE;
-        require HTML::Template;
-        $tmpl = HTML::Template->new(
-            scalarref         => \$DEFAULT_TEMPLATE,
-            global_vars       => 1,
-            die_on_bad_params => 0,
-        );
-    }
-    # give it all the stuff in $self
-    my %tmpl_params = (
-        self => $self
-    );
-    foreach my $param qw(
-        searched elapsed_time keywords hits first_page 
-        last_page prev_page next_page pages start_num 
-        stop_num total_entries
-    ) {
-        $tmpl->param( $param => $self->param($param) )
-            if( $self->param($param) );
-    }
-    $tmpl->param(%tmpl_params);
-    my $output = $tmpl->output();
+=head2 AUTO_SUGGEST_CACHE
 
-    my $filler = HTML::FillInForm->new();
-    return $filler->fill( 
-        scalarref   => ref( $output ) ? $output : \$output,
-        fobject     => $self->query, 
-    );
-}
+A boolean indicating whether or not the results of the L<AUTO_SUGGEST_FILE> should
+be cached in memory or not. This will save repeated file accesses when used in
+a persistant environment.
 
-=head2 perform_search()
+=head2 AUTO_SUGGEST_LIMIT
 
-This is where the meat of the searching is performed. We create a L<SWISH::API>
-object on the L<SWISHE_INDEX> and create the query for the search based on the
-value of the 'keywords' parameter in CGI and any other L<EXTRA_PARAMETERS>. The search
-is executed and if L<HIGHLIGHT> is true we will use Text::Context to highlight
-it and then format the results data only showing L<PER_PAGE> number of elements per page
-(if L<PER_PAGE> is true). We will also show a list of pages that can be selected for navigating
-through the results. Then we will return to the L<show_search()> method for displaying.
+An integer count of the most suggestions to show the user at a time. This is useful
+when you don't want to overwhelm the end user and take over their screen with all
+of your helpful suggestions.
+
+=head2 DOCUMENT_ROOT
+
+This is the root directory to use when looking for files when using the C<highlight_local_page>
+run mode.
 
 =cut
-
-sub perform_search {
-    my $self = shift;
-    my $query = $self->query;
-
-    #if we have any keywords
-    my $keywords = $self->query->param('keywords');
-    if ( defined $keywords && !$self->param('results') ) {
-        my $index = $self->param('SWISHE_INDEX');
-        # make sure the index exists and is readable
-        croak "Index file $index does not exist!"
-            unless( -e $index );
-
-        $self->param( 'searched' => 1 );
-        my $start_time = Time::HiRes::time();
-
-        #create my swish-e object
-        my $swish = SWISH::API->new( $index );
-        croak "Problem reading $index : " . $swish->ErrorString
-            if ( $swish->Error );
-
-        my $search_query = $self->generate_search_query($keywords);
-        # if we got one
-        if( defined $search_query ) {
-
-            my $results = $swish->Query($search_query);
-            if ( $swish->Error ) {
-                carp "Unable to create query: " .  $swish->ErrorString
-                    if( $DEBUG );
-                return $self->show_search();
-            }
-
-            $self->param( 'elapsed_time' => format_number( Time::HiRes::time - $start_time, 3, 1 ) );
-
-            #create my pager and then go to the start page
-            $self->_get_paging_vars($results);
-            my @words = $self->_get_search_terms( $swish, $results, $keywords );
-            $self->param( 'hits' => $self->_process_results( $swish, $results, $search_query ) );
-        } else {
-            return $self->show_search();
-        }
-    }
-
-    # if there are any extra properties used in the search, make them available to
-    # the templates with the value in the query object
-    foreach my $prop ( @{$self->param('EXTRA_PROPERTIES') || []} ) {
-        $self->param($prop => $query->param($prop));
-    } 
-    $self->param( 'keywords' => $keywords );
-    return $self->show_search();
-}
-
 
 #-------------------------PRIVATE METHODS-----------------------
 sub _process_results {
@@ -679,58 +850,12 @@ sub _get_paging_vars {
     $self->param( pages => \@pages ) if ($#pages);
 }
 
-# default template to use if the user doesn't specify one
-our $DEFAULT_TEMPLATE = <<END;
-<html>
-<body>
-<h2>Search<tmpl_if searched> Results</tmpl_if></h2>
-<form><input name="rm" value="perform_search" type="hidden">
-
-<p><input id="fi_keywords" name="keywords" value="" size="50"> <input value="Search" type="submit"></p>
-
-<tmpl_if searched>
-  <tmpl_if hits>
-    (Elapsed Time: <tmpl_var escape=html elapsed_time>s)
-     <tmpl_if pages>
-       <p> Pages: 
-       <tmpl_unless first_page>
-             <a href="?rm=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var escape=url prev_page>"></tmpl_unless>&laquo;Prev<tmpl_unless first_page></a>
-       </tmpl_unless>
-       <tmpl_loop pages>
-         <tmpl_if current>
-           <tmpl_var escape=html page_num>
-         <tmpl_else>
-           <a href="?rm=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var escape=url page_num>"><tmpl_var escape=html page_num></a>
-         </tmpl_if>
-       </tmpl_loop>
-       <tmpl_unless last_page><a href="?rm=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var escape=url next_page>"></tmpl_unless>Next&raquo;<tmpl_unless last_page></a></tmpl_unless>
-       </p>
-     </tmpl_if>
-
-    <p>Results: <tmpl_var escape=html start_num> to <tmpl_var escape=html stop_num> of <tmpl_var escape=html total_entries></p>
-
-    <dl>
-    <tmpl_loop hits>
-      <dt>
-      <a href="<tmpl_var path>"><tmpl_if title><tmpl_var escape=html title><tmpl_else><tmpl_var escape=html path></tmpl_if></a>
-      </dt>
-      <dd><tmpl_var escape=html last_modified> - <tmpl_var escape=html size></dd>
-      <dd><p><tmpl_var description></p></dd>
-    </tmpl_loop>
-    </dl>
-</tmpl_if></tmpl_if>
-
-<tmpl_if searched><tmpl_unless hits><p>No Results Found.</p></tmpl_unless></tmpl_if>
-</body>
-</html>
-
-END
 
 1;
 
 __END__
 
-=head1 TEMPLATES
+=head1 TEMPLATE USAGE
 
 A default template is provided inside the module which will be used if
 you don't specify a template.  This is useful for testing out the
@@ -748,6 +873,18 @@ These variables are available throughout the templates and contain information r
 the search as a whole:
 
 =over 8
+
+=item * ajax
+
+A boolean indicating whether or not this search is an AJAX search or not.
+You can use this flag to exclude everything but your search results
+in your template.
+
+=item * url
+
+The URL of this application. This is useful if you want to use the same templates
+in multiple applications, especially if you are using the AJAX capabilities since
+they require the URL to submit to.
 
 =item * searched
 
@@ -859,15 +996,15 @@ The total number of results in their search, not the total number shown on the p
 =item *
 
 If at any time prior to the execution of the 'perform_search' run mode you set the 
-C<$self-<gt>param('results')> parameter a search will not be performed, but rather
+C<<$self->param('results')>> parameter a search will not be performed, but rather
 and empty set of results is returned. This is helpful when you decide in either
-cgiapp_init or cgiapp_prerun that this user does not have permissions to perform the desired
+cgiapp_init that this user does not have permissions to perform the desired
 search.
 
 =item *
 
 You must use the StoreDescription setting in your Swish-e
-configuration file.  If you don't you'll get an error when
+configuration file. If you don't you'll get an error when
 C::A::Search tries to retrieve a description for each hit.
 
 =back
@@ -880,6 +1017,12 @@ Thanks to Plus Three, LP (http://www.plusthree.com) for sponsoring my work on th
 
 =head1 CONTRIBUTORS
 
-Sam Tregar <sam@tregar.com>
+=over
+
+=item Sam Tregar <sam@tregar.com>
+
+=item Mark Stosberg <mark@summersault.com>
+
+=back
 
 
