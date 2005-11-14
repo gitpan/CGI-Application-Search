@@ -16,7 +16,7 @@ use POSIX;
 use HTML::HiLiter;
 use Text::Context;
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 our (
     $DEBUG,                         # a debug flag
     @SUGGEST_CACHE,                 # cached suggestions

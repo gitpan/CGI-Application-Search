@@ -1,6 +1,9 @@
 Revision history for Perl extension CGI::Application::Dispatch.
 
-0.06 ()
+0.07 (Nov 13, 2005)
+    - No code changes just fixed failing tests when installed via CPAN
+
+0.06 (Nov 12, 2005)
     - added AJAX flag to turn on non-refresh searches
     - added AUTO_SUGGEST, AUTO_SUGGEST_FILE, AUTO_SUGGEST_CACHE and AUTO_SUGGEST_LIMIT
         functionality

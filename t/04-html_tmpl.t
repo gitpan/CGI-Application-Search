@@ -1,6 +1,7 @@
 use Test::More;
 use CGI;
 use CGI::Application::Search;
+use lib './t/lib';
 
 # setup our tests
 plan(tests => 96);
