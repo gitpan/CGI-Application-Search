@@ -74,7 +74,7 @@ Very basic with no frills, just a simple search.
       <dt>
       <a href="<tmpl_var path>"><tmpl_if title><tmpl_var escape=html title><tmpl_else><tmpl_var escape=html path></tmpl_if></a>
       </dt>
-      <dd><tmpl_var escape=html last_modified> - <tmpl_var escape=html size></dd>
+      <dd><tmpl_var last_modified> - <tmpl_var size></dd>
       <dd><p><tmpl_var description></p></dd>
     </tmpl_loop>
     </dl>

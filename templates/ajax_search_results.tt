@@ -115,7 +115,7 @@ new Ajax.Autocompleter( 'keywords', 'keywords_auto_complete', url, { parameters:
 
 [% IF searched %]
   [% IF hits %]
-    <em>(Elapsed Time: [% elapsed_time %] s)</em>
+    <em>(Elapsed Time: [% elapsed_time %]s)</em>
 
     <div class="pagination">
 
@@ -145,7 +145,7 @@ new Ajax.Autocompleter( 'keywords', 'keywords_auto_complete', url, { parameters:
     </div>
     [% END %]
 
-    Results: [% start_num %] to [% stop_num %] of [% total_entrie %]
+    Results: [% start_num %] to [% stop_num %] of [% total_entries %]
 
     </div>
 
@@ -160,7 +160,7 @@ new Ajax.Autocompleter( 'keywords', 'keywords_auto_complete', url, { parameters:
         [% hit.path | html %]
       [% END %]
       </a>
-      - <em>[% hit.size %]</em>
+      <em>[% hit.last_modified %] - [% hit.size %]</em>
       </dt>
       <dd><p>[% hit.description %]</p></dd>
     [% END %]

@@ -113,7 +113,7 @@ new Ajax.Autocompleter( 'keywords', 'keywords_auto_complete', url, { parameters:
   -->
 <tmpl_if searched>
   <tmpl_if hits>
-    <em>(Elapsed Time: <tmpl_var elapsed_time> s)</em>
+    <em>(Elapsed Time: <tmpl_var elapsed_time>s)</em>
 
 
     <div class="pagination">
@@ -157,7 +157,7 @@ new Ajax.Autocompleter( 'keywords', 'keywords_auto_complete', url, { parameters:
       <a href="?rm=highlight_local_page&amp;path=<tmpl_var path escape='URL'>&amp;keywords=<tmpl_var keywords escape='URL'>">
         <tmpl_if title><tmpl_var title><tmpl_else><tmpl_var escape=html path></tmpl_if>
       </a>
-      - <em><tmpl_var size></em>
+      <em><tmpl_var last_modified> - <tmpl_var size></em>
       </dt>
       <dd><p><tmpl_var description></p></dd>
     </tmpl_loop>

@@ -225,7 +225,7 @@ This command will create an alphabetical listing of every word in your documents
 that has at least 2 alphabetical characters.
 
     # in bash
-    swishe -T INDEX_WORDS_META -f swishe.index \
+    swish-e -T INDEX_WORDS_META -f swishe.index \
         | grep -o -P "^\S+"  \
         | grep -P "[a-z]{2}" \
      > auto_suggest_file

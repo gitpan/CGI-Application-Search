@@ -16,7 +16,7 @@ use POSIX;
 use HTML::HiLiter;
 use Text::Context;
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 our (
     $DEBUG,                         # a debug flag
     @SUGGEST_CACHE,                 # cached suggestions
@@ -69,46 +69,51 @@ CGI::Application::Search - Base class for CGI::App Swish-e site engines
 
 A L<CGI::Application> based control module that uses Swish-e API in
 perl (L<http://swish-e.org>) to to perform searches on a swish-e index
-of documents. It uses L<HTML::Template> to display the search form and
-the results.  You may customize this template to alter the look and
-feel of the generated search interface.
+of documents.
 
 =head2 Features
 
 =over
 
-=item Built-in templates to use out of box or as examples for your own usage
+=item * Sub-Classable. Unlike the Perl examples that come with swish-e,
+this is not a script, and can be customized without modifiying the original
+so that several sites may share the same underlying code.
 
-=item HiLighted search results
+=item * Uses L<CGI::Application::Plugin::AnyTemplate> to allow flexibility
+in template engine choice (L<HTML::Template>, L<Template> or L<Petal>).
 
-=item HiLighted pages linked from search results
+=item * Built-in templates to use out of box or as examples for your own usage
 
-=item AJAX results sent to page without need of a page reload
+=item * HiLighted search results
 
-=item AJAX powered 'auto-suggest' to give the user list of choices available 
+=item * HiLighted pages linked from search results
+
+=item * AJAX results sent to page without need of a page reload
+
+=item * AJAX powered 'auto-suggest' to give the user list of choices available 
 for search 
 
 =back
 
 =head1 TUTORIAL
 
-If this is your first time using Swish-e, or you think you need a refresher
-or if you want step-by-step instructions to use the AJAX capabilities
+If this is your first time using Swish-e (or you think you need a refresher)
+or if you want step-by-step instructions on how to use the AJAX capabilities
 of this module, then please see L<CGI::Application::Search::Tutorial>. 
 
 =head1 RUN_MODES
 
-The start_mode is L<show_search> and these are the other available
-run modes:
+The start_mode is B<show_search>.
 
 =head2 show_search()
 
-This method will load the template pointed to by the C<TEMPLATE> param
-(falling back on a default internal template if none is configured)
+This method will load the template pointed to by the B<TEMPLATE> param
+(falling back to a default internal template if none is specified)
 and display it to the user.  It will 'associate' this template with
 $self so that any parameters in $self->param() are also accessible to
 the template. It will also use L<HTML::FillInForm> to fill in the
-search form with the previously selected parameters.
+search form with the previously selected parameters (unless it's a
+'non-page-refresh' AJAX search).
 
 =cut 
 
@@ -171,12 +176,12 @@ sub show_search {
 =head2 perform_search()
 
 This is where the meat of the searching is performed. We create a L<SWISH::API>
-object on the L<SWISHE_INDEX> and create the query for the search based on the
-value of the 'keywords' parameter in CGI and any other L<EXTRA_PARAMETERS>. The search
-is executed and if L<HIGHLIGHT> is true we will use Text::Context to highlight
-it and then format the results data only showing L<PER_PAGE> number of elements per page
-(if L<PER_PAGE> is true). We will also show a list of pages that can be selected for navigating
-through the results. Then we will return to the L<show_search()> method for displaying.
+object on the B<SWISHE_INDEX> and create the query for the search based on the
+value of the I<keywords> parameter in CGI and any other B<EXTRA_PARAMETERS>. The search
+is executed and if B<HIGHLIGHT> is true we will use LHTML::HiLiter> to highlight
+it and then format the results, only showing B<PER_PAGE> number of elements
+A paging list is also shown for navigating through the results. Then we will 
+return to the B<show_search()> method for displaying everything.
 
 =cut
 
@@ -233,9 +238,9 @@ sub perform_search {
 
 =head2 highlight_remote_page
 
-This run mode will fetch a remote page (with either a fullrelative, or absolute URL using the C<url>
+This run mode will fetch a remote page (with either a relative, or absolute URL using the C<url>
 Query param) and highlight the keywords used in the search on that page (the C<keywords> Query
-param) using the <HIGHLIGHT_TAG>, L<HIGHLIGHT_CLASS> or L<HIGHLIGHT_COLORS> options. This run 
+param) using the <HIGHLIGHT_TAG>, B<HIGHLIGHT_CLASS> or B<HIGHLIGHT_COLORS> options. This run 
 mode is best used in the links of the search results listing.
 
     <a href="?rm=highlight_remote_page;url=http%3A%2F%2Fexample.com%2Fabout_us%2Findex.html;keywords=Us">about us</a>
@@ -274,9 +279,9 @@ sub _hilight_page {
 =head2 highlight_local_page
 
 This run mode will fetch a local page (only allowing relative files based in
-the L<DOCUMENT_ROOT> config var and the path using the C<path> Query param) 
+the B<DOCUMENT_ROOT> config var and the path using the C<path> Query param) 
 and highlight the keywords used in the search on that page (the C<keywords> Query
-param) using the <HIGHLIGHT_TAG>, L<HIGHLIGHT_CLASS> or L<HIGHLIGHT_COLORS> options. This run
+param) using the <HIGHLIGHT_TAG>, B<HIGHLIGHT_CLASS> or B<HIGHLIGHT_COLORS> options. This run
 mode is best used in the links of the search results listing.
 
     <a href="?rm=highlight_local_page;path=%2Fabout_us%2Findex.html;keywords=Us">about us</a>
@@ -307,7 +312,7 @@ sub highlight_local_page {
 =head2 suggestions
 
 This run mode will return an AJAX listing of words that should be suggested to the user for the
-words that they have typed so far. It uses the L<suggested_words> method to actually choose what
+words that they have typed so far. It uses the C<suggested_words()> method to actually choose what
 words to send back.
 
 =cut
@@ -322,6 +327,7 @@ sub suggestions {
             )
         );
     } else {
+        carp "Trying to use auto-suggest feature without AJAX and AUTO_SUGGEST turned on!";
         return $self->prototype->auto_complete_result([]);
     }
 }
@@ -431,7 +437,7 @@ sub setup {
 =head2 generate_search_query($keywords)
 
 This method is used to generate the query for swish-e from the $keywords (by default the 'keywords' 
-CGI parameter), as well as any L<EXTRA_PROPERTIES> that are present. 
+CGI parameter), as well as any B<EXTRA_PROPERTIES> that are present. 
 
 If you wish to generate your own search query then you should override this method. This is 
 common if you need to have access/authorization control that will need to be taken into 
@@ -464,11 +470,11 @@ sub generate_search_query {
 
 =head2 suggested_words($word)
 
-This object method is used by the L<AUTO_SUGGEST> flag to return the words
+This object method is used by the B<AUTO_SUGGEST> flag to return the words
 that should be suggested to the user after they have typed a C<$word>.
 It returns an array reference of those words.
 
-By default it will just look for words in the L<AUTO_SUGGEST_FILE> that
+By default it will just look for words in the B<AUTO_SUGGEST_FILE> that
 begin with C<$word>. If you need more performance or flexibility (eg,
 storing your words in a database and querying for them) you are encouraged
 to override this method.
@@ -485,7 +491,10 @@ sub suggested_words {
     my $file = $self->param('AUTO_SUGGEST_FILE');
     my @suggestions;
 
-    unless( -r $file ) {
+    if(! $file ) {
+        warn "AUTO_SUGGEST_FILE was not specified!";
+        return [];
+    } elsif(! -r $file ) {
         warn "AUTO_SUGGEST_FILE $file is not readable!";
         return [];
     }
@@ -656,7 +665,7 @@ user to have the option of narrowing his results by category. You add the word
 that the user has the option of giving a value to your search form. If the user
 gives that element a value, then it will be seen and applied to the search. This
 will also only work if you have the 'category' element defined for your documents
-(see L<SWISH-E Configuration> and 'MetaNames' in the swish-e.org SWISH-CONF
+(see I<SWISH-E Configuration> and 'MetaNames' in the swish-e.org SWISH-CONF
 documentation).
 
 The default is an empty list.
@@ -678,8 +687,8 @@ may prove to be too much for some servers (eg, a shared hosting environment).
 
 =head2 AUTO_SUGGEST
 
-If the L<AJAX> flag is true, then this will allow the broswer to give suggestions
-to the user as they type. To use this, you must either use the L<AUTO_SUGGEST_FILE>
+If the B<AJAX> flag is true, then this will allow the broswer to give suggestions
+to the user as they type. To use this, you must either use the B<AUTO_SUGGEST_FILE>
 configuration option, or override the C<suggested_words()> method.
 
 =head2 AUTO_SUGGEST_FILE
@@ -689,7 +698,7 @@ alphabetical order with one word per line.
 
 =head2 AUTO_SUGGEST_CACHE
 
-A boolean indicating whether or not the results of the L<AUTO_SUGGEST_FILE> should
+A boolean indicating whether or not the results of the B<AUTO_SUGGEST_FILE> should
 be cached in memory or not. This will save repeated file accesses when used in
 a persistant environment.
 
@@ -936,8 +945,8 @@ then formatted with Number::Format::format_bytes
 =item description
 
 The C<swishdescription> property of the results as indexed by SWISH-E. If
-L<HIGHLIGHT> is true, then this description will also have search
-terms highlighted and will only be, at most, L<DESCRIPTION_LENGTH> characters
+B<HIGHLIGHT> is true, then this description will also have search
+terms highlighted and will only be, at most, B<DESCRIPTION_LENGTH> characters
 long.
 
 =back

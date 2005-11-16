@@ -4,6 +4,5 @@ Before 1.0
 - build out t/conf/swish-e.index during install so that it's portable
     (this includes locating the swish-e binary)
 - 100% test coverage
-- factor out tests using Test::Class to eliminate duplication
  
 
