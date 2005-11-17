@@ -79,7 +79,6 @@ div.auto_complete ul strong.highlight {
 
 <form id="search" name="search" onsubmit="return ajax_form_search(this);" >
 <input name="rm" value="perform_search" type="hidden">
-<input name="ajax" value="1" type="hidden">
 
 <table summary="layout">
 <tr>
@@ -124,7 +123,7 @@ new Ajax.Autocompleter( 'keywords', 'keywords_auto_complete', url, { parameters:
     <tmpl_if first_page>
         &laquo;Prev
     <tmpl_else>
-        <a href="javascript:ajax_search('rm=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var prev_page>&amp;ajax=1', 'Loading Page #<tmpl_var prev_page>')">&laquo;Prev</a>
+        <a href="javascript:ajax_search('rm=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var prev_page>', 'Loading Page #<tmpl_var prev_page>')">&laquo;Prev</a>
     </tmpl_if>
     &nbsp;&nbsp;&nbsp;
 
@@ -132,7 +131,7 @@ new Ajax.Autocompleter( 'keywords', 'keywords_auto_complete', url, { parameters:
         <tmpl_if current>
         <tmpl_var page_num>
         <tmpl_else>
-        <a href="javascript:ajax_search('rm=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var page_num>&amp;ajax=1', 'Loading Page #<tmpl_var page_num>')"><tmpl_var page_num></a>
+        <a href="javascript:ajax_search('rm=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var page_num>', 'Loading Page #<tmpl_var page_num>')"><tmpl_var page_num></a>
         </tmpl_if>
         &nbsp;
     </tmpl_loop>
@@ -140,7 +139,7 @@ new Ajax.Autocompleter( 'keywords', 'keywords_auto_complete', url, { parameters:
     <tmpl_if last_page>
         Next&raquo;
     <tmpl_else>
-        <a href="javascript:ajax_search('rm=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var next_page>&amp;ajax=1', 'Loading Page #<tmpl_var next_page>')">Next&raquo;</a>
+        <a href="javascript:ajax_search('rm=perform_search&amp;keywords=<tmpl_var escape=url keywords>&amp;page=<tmpl_var next_page>', 'Loading Page #<tmpl_var next_page>')">Next&raquo;</a>
     </tmpl_if>
     &nbsp;&nbsp;&nbsp;
     </div>
@@ -178,7 +177,7 @@ function ajax_search(query, msg) {
     if( Ajax.getTransport != false ) {
         new Ajax.Updater( 
             'search_listing',  
-            url, 
+            url + "&amp;ajax=1", 
             { 
                 parameters: query,
                 asynchronous: 1,

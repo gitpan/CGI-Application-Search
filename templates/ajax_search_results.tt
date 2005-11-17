@@ -80,7 +80,6 @@ div.auto_complete ul strong.highlight {
 
 <form id="search" name="search" onsubmit="return ajax_form_search(this);" >
 <input name="rm" value="perform_search" type="hidden">
-<input name="ajax" value="1" type="hidden">
 
 <table summary="layout">
 <tr>
@@ -125,14 +124,14 @@ new Ajax.Autocompleter( 'keywords', 'keywords_auto_complete', url, { parameters:
     [% IF first_page %]
         &laquo;Prev
     [% ELSE %]
-        <a href="javascript:ajax_search('rm=perform_search&amp;keywords=[% keywords | uri %]&amp;page=[% prev_page %]&amp;ajax=1', 'Loading Page #[% prev_page %]')">&laquo;Prev</a>
+        <a href="javascript:ajax_search('rm=perform_search&amp;keywords=[% keywords | uri %]&amp;page=[% prev_page %]', 'Loading Page #[% prev_page %]')">&laquo;Prev</a>
     [% END %]
 
     [% FOREACH page IN pages %]
         [% IF page.current %]
           [% page.page_num %]
         [% ELSE %]
-          <a href="javascript:ajax_search('rm=perform_search&amp;keywords=[% keywords | uri %]&amp;page=[% page.page_num %]&amp;ajax=1', 'Loading Page #[% page.page_num %]')">[% page.page_num %]</a>
+          <a href="javascript:ajax_search('rm=perform_search&amp;keywords=[% keywords | uri %]&amp;page=[% page.page_num %]', 'Loading Page #[% page.page_num %]')">[% page.page_num %]</a>
         [% END %]
         &nbsp;
     [% END %]
@@ -140,7 +139,7 @@ new Ajax.Autocompleter( 'keywords', 'keywords_auto_complete', url, { parameters:
     [% IF last_page %]
         Next&raquo;
     [% ELSE %]
-        <a href="javascript:ajax_search('rm=perform_search&amp;keywords=[% keywords | uri %]>&amp;page=[% next_page %]&amp;ajax=1', 'Loading Page #[% next_page %]')">Next&raquo;</a>
+        <a href="javascript:ajax_search('rm=perform_search&amp;keywords=[% keywords | uri %]>&amp;page=[% next_page %]', 'Loading Page #[% next_page %]')">Next&raquo;</a>
     [% END %]
     </div>
     [% END %]
@@ -180,7 +179,7 @@ new Ajax.Autocompleter( 'keywords', 'keywords_auto_complete', url, { parameters:
 function ajax_search(query, msg) {
      new Ajax.Updater( 
         'search_listing',  
-        url, 
+        url + "&amp;ajax=1",
         { 
             parameters: query,
             asynchronous: 1,

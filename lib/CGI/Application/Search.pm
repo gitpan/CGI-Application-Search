@@ -16,7 +16,7 @@ use POSIX;
 use HTML::HiLiter;
 use Text::Context;
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 our (
     $DEBUG,                         # a debug flag
     @SUGGEST_CACHE,                 # cached suggestions
@@ -320,14 +320,14 @@ words to send back.
 sub suggestions {
     my $self = shift;
 
-    if( $self->param('AJAX') && $self->param('AUTO_SUGGEST') ) {
+    if( $self->param('AUTO_SUGGEST') ) {
         return $self->prototype->auto_complete_result(
             $self->suggested_words(
                 $self->query->param('keywords')
             )
         );
     } else {
-        carp "Trying to use auto-suggest feature without AJAX and AUTO_SUGGEST turned on!";
+        carp "Trying to use auto-suggest feature without AUTO_SUGGEST turned on!";
         return $self->prototype->auto_complete_result([]);
     }
 }
@@ -687,7 +687,7 @@ may prove to be too much for some servers (eg, a shared hosting environment).
 
 =head2 AUTO_SUGGEST
 
-If the B<AJAX> flag is true, then this will allow the broswer to give suggestions
+If true, then this will allow the broswer to give suggestions
 to the user as they type. To use this, you must either use the B<AUTO_SUGGEST_FILE>
 configuration option, or override the C<suggested_words()> method.
 

@@ -1,14 +1,11 @@
 Build.PL
 Changes
-cover_db/cover.12
-cover_db/cover.css
-cover_db/coverage.html
-cover_db/structure/fd79e46fbee65e03e911850c68053eb5
 lib/CGI/Application/Search.pm
 lib/CGI/Application/Search/Tutorial.pm
 Makefile.PL
 MANIFEST			This list of files
 META.yml
+README
 t/00-pod.t
 t/01-pod-coverage.t
 t/02-load.t
@@ -39,3 +36,4 @@ templates/prototype_javascript.tmpl
 templates/search_results.tmpl
 templates/search_results.tt
 TODO
+README

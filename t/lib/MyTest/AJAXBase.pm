@@ -39,7 +39,7 @@ sub B_ajax_search: Test(9) {
     %MyTest::Base::BASE_CGI_PARAMS = ();
 }
 
-sub L_suggestions: Test(13) {
+sub L_suggestions: Test(12) {
     my $self = shift;
     my @p_words = qw(
         panic
@@ -170,21 +170,6 @@ sub L_suggestions: Test(13) {
     contains_string($output, '<ul></ul>');
     contains_string($self->_stderr_junk(), 'AUTO_SUGGEST_FILE foo.txt is not readable!');
 
-    # without AJAX
-    $app = CGI::Application::Search->new(
-        QUERY   => $cgi,
-        PARAMS  => {
-            %MyTest::Base::BASE_OPTIONS,
-            $self->options,
-            AUTO_SUGGEST => 1,
-            AJAX         => 0,
-        },
-    );
-    $self->_throw_away_stderr();
-    $output = $app->run();
-    $self->_restore_stderr();
-    contains_string($self->_stderr_junk(), 'without AJAX and AUTO_SUGGEST turned on');
-
     # without AUTO_SUGGEST
     $app = CGI::Application::Search->new(
         QUERY   => $cgi,
@@ -196,7 +181,7 @@ sub L_suggestions: Test(13) {
     $self->_throw_away_stderr();
     $output = $app->run();
     $self->_restore_stderr();
-    contains_string($self->_stderr_junk(), 'without AJAX and AUTO_SUGGEST turned on');
+    contains_string($self->_stderr_junk(), 'without AUTO_SUGGEST turned on');
 }
 
 1;

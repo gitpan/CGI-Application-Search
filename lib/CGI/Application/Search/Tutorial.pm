@@ -1,3 +1,4 @@
+use strict; # this makes CPANTS happy, even though it's straight POD
 =head1 NAME 
 
 CGI::Application::Search::Tutorial - How do we use this thing?

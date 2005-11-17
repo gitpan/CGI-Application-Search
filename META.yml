@@ -1,10 +1,12 @@
 --- #YAML:1.0
 name: CGI-Application-Search
-version: 0.08
+version: 0.09
 author:
   - Michael Peters <mpeters@plusthree.com>
 abstract: Base class for CGI::App Swish-e site engines
 license: perl
+resources:
+  license: http://dev.perl.org/licenses/
 requires:
   CGI::Application: 3.2
   CGI::Application::Plugin::AnyTemplate: 0
@@ -24,5 +26,5 @@ requires:
 provides:
   CGI::Application::Search:
     file: lib/CGI/Application/Search.pm
-    version: 0.08
-generated_by: Module::Build version 0.2611
+    version: 0.09
+generated_by: Module::Build version 0.2703

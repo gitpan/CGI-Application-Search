@@ -5,7 +5,16 @@ WriteMakefile
           'PL_FILES' => {},
           'INSTALLDIRS' => 'site',
           'NAME' => 'CGI::Application::Search',
+          'EXE_FILES' => [],
           'VERSION_FROM' => 'lib/CGI/Application/Search.pm',
+          'PM' => {
+                    'lib/CGI/Application/Search.pm' => 'lib/CGI/Application/Search.pm',
+                    'templates/prototype_javascript.tmpl' => 'lib/CGI/Application/Search/templates/prototype_javascript.tmpl',
+                    'templates/search_results.tmpl' => 'lib/CGI/Application/Search/templates/search_results.tmpl',
+                    'templates/ajax_search_results.tt' => 'lib/CGI/Application/Search/templates/ajax_search_results.tt',
+                    'templates/search_results.tt' => 'lib/CGI/Application/Search/templates/search_results.tt',
+                    'templates/ajax_search_results.tmpl' => 'lib/CGI/Application/Search/templates/ajax_search_results.tmpl'
+                  },
           'PREREQ_PM' => {
                            'SWISH::API' => '0.01',
                            'File::Spec' => 0,

@@ -21,6 +21,7 @@ Module::Build->new(
         'File::Spec'                              => 0,
     },
     create_makefile_pl => 'traditional',
+    create_readme      => 1,
     pm_files => {
         'lib/CGI/Application/Search.pm'      => 'lib/CGI/Application/Search.pm',
         'templates/search_results.tmpl'      => 'lib/CGI/Application/Search/templates/search_results.tmpl',
