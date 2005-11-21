@@ -16,7 +16,7 @@ use POSIX;
 use HTML::HiLiter;
 use Text::Context;
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 our (
     $DEBUG,                         # a debug flag
     @SUGGEST_CACHE,                 # cached suggestions
@@ -80,9 +80,9 @@ this is not a script, and can be customized without modifiying the original
 so that several sites may share the same underlying code.
 
 =item * Uses L<CGI::Application::Plugin::AnyTemplate> to allow flexibility
-in template engine choice (L<HTML::Template>, L<Template> or L<Petal>).
+in template engine choice (L<HTML::Template>, L<Template-Toolkit> or L<Petal>).
 
-=item * Built-in templates to use out of box or as examples for your own usage
+=item * Built-in templates to use out of box or as examples for your own templates
 
 =item * HiLighted search results
 
@@ -99,7 +99,7 @@ for search
 
 If this is your first time using Swish-e (or you think you need a refresher)
 or if you want step-by-step instructions on how to use the AJAX capabilities
-of this module, then please see L<CGI::Application::Search::Tutorial>. 
+of this module, then please see the L<"Tutorial"|CGI::Application::Search::Tutorial>. 
 
 =head1 RUN_MODES
 
@@ -178,7 +178,7 @@ sub show_search {
 This is where the meat of the searching is performed. We create a L<SWISH::API>
 object on the B<SWISHE_INDEX> and create the query for the search based on the
 value of the I<keywords> parameter in CGI and any other B<EXTRA_PARAMETERS>. The search
-is executed and if B<HIGHLIGHT> is true we will use LHTML::HiLiter> to highlight
+is executed and if B<HIGHLIGHT> is true we will use L<HTML::HiLiter> to highlight
 it and then format the results, only showing B<PER_PAGE> number of elements
 A paging list is also shown for navigating through the results. Then we will 
 return to the B<show_search()> method for displaying everything.
@@ -240,7 +240,7 @@ sub perform_search {
 
 This run mode will fetch a remote page (with either a relative, or absolute URL using the C<url>
 Query param) and highlight the keywords used in the search on that page (the C<keywords> Query
-param) using the <HIGHLIGHT_TAG>, B<HIGHLIGHT_CLASS> or B<HIGHLIGHT_COLORS> options. This run 
+param) using the B<HIGHLIGHT_TAG>, B<HIGHLIGHT_CLASS> or B<HIGHLIGHT_COLORS> options. This run 
 mode is best used in the links of the search results listing.
 
     <a href="?rm=highlight_remote_page;url=http%3A%2F%2Fexample.com%2Fabout_us%2Findex.html;keywords=Us">about us</a>
@@ -281,7 +281,7 @@ sub _hilight_page {
 This run mode will fetch a local page (only allowing relative files based in
 the B<DOCUMENT_ROOT> config var and the path using the C<path> Query param) 
 and highlight the keywords used in the search on that page (the C<keywords> Query
-param) using the <HIGHLIGHT_TAG>, B<HIGHLIGHT_CLASS> or B<HIGHLIGHT_COLORS> options. This run
+param) using the B<HIGHLIGHT_TAG>, B<HIGHLIGHT_CLASS> or B<HIGHLIGHT_COLORS> options. This run
 mode is best used in the links of the search results listing.
 
     <a href="?rm=highlight_local_page;path=%2Fabout_us%2Findex.html;keywords=Us">about us</a>
@@ -312,7 +312,7 @@ sub highlight_local_page {
 =head2 suggestions
 
 This run mode will return an AJAX listing of words that should be suggested to the user for the
-words that they have typed so far. It uses the C<suggested_words()> method to actually choose what
+words that they have typed so far. It uses the C<suggested_words()> method to actually choose which
 words to send back.
 
 =cut
@@ -336,7 +336,7 @@ sub suggestions {
 =head1 OTHER METHODS
 
 Most of the time you will not need to call the methods that are implemented in this module. But
-in cases where more customization is required than can be done in the templates, it might be prudent
+in some cases customizing the templates is not enought. If so, it might be prudent
 to override or extend these methods in your derived class.
 
 =head2 new()
@@ -592,24 +592,29 @@ affect the search and display of the results. They are:
 =head2 SWISHE_INDEX
 
 This is the swishe index used for the searches. The default is 'data/swish-e.index'. 
-You will probably override this every time.
+You will probably set this every time.
 
 =head2 AJAX
 
-This is a boolean indicating whether or not AJAX capabilities will
+This is a boolean indicating whether or not a non-page-refresh AJAX search will
 be permitted.
 
-Please see the L<CGI::Application::Search::Tutorial> for more information
+Please see the L<"Tutorial"|CGI::Application::Search::Tutorial> for more information
 on how to use the AJAX capabilities of this module.
 
 =head2 TEMPLATE
 
-The name of the search interface template.  A default template is
-included within the module which will be used if you don't specify
-one.  A more elaborate example is included in the distribution under
-the C<tmpl/> directory.
+The name of the search interface template. Default templates are
+included with this distribution and will be used if you don't specify
+one. Which default template is used depends on which B<TEMPLATE_TYPE>
+you are using (I<HTMLTemplate> or I<TemplateToolkit>) and whether or
+not the B<AJAX> flag is true.
 
-Please see L<TEMPLATE USAGE> for more information on what variables are 
+These sample templates are installed with the module, or you can view
+them by looking under the F<templates/> directory of the source distribution
+(I<.tar.gz>).
+
+Please see L<TEMPLATE USAGE> for more information on which variables are 
 passed into your template.
 
 =head2 TEMPLATE_TYPE
@@ -638,13 +643,13 @@ templates. The default is true.
 
 =head2 HIGHLIGHT_TAG
 
-The tag used to surround the highlighted context. The default is C<< strong >>.
+The HTML tag used to surround the highlighted context. The default is C<< strong >>.
 
 =head2 HIGHLIGHT_CLASS
 
-The class attribute of the HIGHLIGHT_TAG HTML tag. This is useful when you
+The class attribute of the B<HIGHLIGHT_TAG> HTML tag. This is useful when you
 want to dictacte the style through a CSS style sheet. If given, this value
-will override that of HIGHLIGHT_COLORS. By default it is C<< '' >> (an empty string).
+will override that of B<HIGHLIGHT_COLORS>. It has no value by default.
 
 =head2 HIGHLIGHT_COLORS
 
@@ -668,7 +673,7 @@ will also only work if you have the 'category' element defined for your document
 (see I<SWISH-E Configuration> and 'MetaNames' in the swish-e.org SWISH-CONF
 documentation).
 
-The default is an empty list.
+By default, this list is empty.
 
 =head2 DESCRIPTION_LENGTH
 
@@ -681,8 +686,8 @@ This is the number of words on either side of the searched for words and phrases
 (keywords) that will be displayed as part of the description. If this is 0, then
 the entire description will be displayed. The default is 0. 
 
-B<NOTE>: This directive will cause search to perform some intensive computations
-to figure out the best piece of the description to display. These computations
+B<NOTE>: This directive will cause Search to use L<Text::Context>, which can
+be slow and CPU intensive at times. These computations
 may prove to be too much for some servers (eg, a shared hosting environment).
 
 =head2 AUTO_SUGGEST
@@ -690,6 +695,9 @@ may prove to be too much for some servers (eg, a shared hosting environment).
 If true, then this will allow the broswer to give suggestions
 to the user as they type. To use this, you must either use the B<AUTO_SUGGEST_FILE>
 configuration option, or override the C<suggested_words()> method.
+
+You template must also have the appropriate JavaScript code. Please see the
+L<"Tutorial"|CGI::Application::Search::Tutorial> for more details.
 
 =head2 AUTO_SUGGEST_FILE
 
@@ -866,15 +874,14 @@ __END__
 
 =head1 TEMPLATE USAGE
 
-A default template is provided inside the module which will be used if
-you don't specify a template.  This is useful for testing out the
-module and may also serve as a base for your template development.
+Sample templates are included with this distribution.
+These sample templates are installed with the module, or you can view
+them by looking under the F<templates/> directory of the source distribution
+(I<.tar.gz>).
 
-Two more elaborate templates are provided as examples of how to use
-this module in the C<tmpl/> directory. Please feel free to copy and
-change them in what ever way you see fit. To help in giving you more
-information to display (or not display, depending on your preference)
-the following variables are available for your templates:
+Please feel free to copy and change them in what ever way you see fit. To help 
+give you more information to display (or not display, depending on your 
+preference) the following variables are available for your templates:
 
 =head2 Global Tmpl Vars
 
@@ -934,13 +941,13 @@ The C<swishdocpath> property of the results as indexed by SWISH-E
 =item last_modified
 
 The C<swishlastmodified> property of the results as indexed by SWISH-E
-and then formatted using Time::Piece::strftime with a format string of
-C<%B %d, %Y>.
+and then formatted using L<Time::Piece>'s C<strftime()> method with a 
+format string of C<%B %d, %Y>.
 
 =item size
 
 The C<swishdocsize> property of the results as indexed by SWISH-E and
-then formatted with Number::Format::format_bytes
+then formatted with L<Number::Format>'s C<format_bytes()> method.
 
 =item description
 
@@ -1005,14 +1012,14 @@ The total number of results in their search, not the total number shown on the p
 =item *
 
 If at any time prior to the execution of the 'perform_search' run mode you set the 
-C<<$self->param('results')>> parameter a search will not be performed, but rather
-and empty set of results is returned. This is helpful when you decide in either
-cgiapp_init that this user does not have permissions to perform the desired
-search.
+C<< $self->param('results') >> parameter, a search will not be performed. Instead
+those results are returned. Instead, an empty result list will be returned to the
+user.  This is helpful when you decide in the C<cgiapp_init> stage that this user 
+does not have permissions to perform the desired search.
 
 =item *
 
-You must use the StoreDescription setting in your Swish-e
+You must use the I<StoreDescription> setting in your Swish-e
 configuration file. If you don't you'll get an error when
 C::A::Search tries to retrieve a description for each hit.
 

@@ -1,5 +1,9 @@
 Revision history for Perl extension CGI::Application::Dispatch.
 
+0.10 (Nov 21, 2005)
+    - Changes to Makefile.PL to make CPAN installation happier
+    - documentation cleanup and clarifications
+
 0.09 (Nov 17, 2005)
     - Default templates now fail more gracefully when the browser doesn't support AJAX
     - no longer need both AJAX and AUTO_SUGGEST to use just the AUTO_SUGGEST functionality
