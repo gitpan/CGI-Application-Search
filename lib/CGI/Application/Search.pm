@@ -16,7 +16,7 @@ use POSIX;
 use HTML::HiLiter;
 use Text::Context;
 
-our $VERSION = '0.10';
+our $VERSION = '1.00';
 our (
     $DEBUG,                         # a debug flag
     @SUGGEST_CACHE,                 # cached suggestions
@@ -156,7 +156,7 @@ sub show_search {
     $tmpl->param(%tmpl_params);
 
     # add this url to the template too
-    $tmpl->param( url => $query->url(-absolute => 1));
+    $tmpl->param( url => $query->url(-absolute => 1, path_info => 1));
     # add the possible ajax flag
     $tmpl->param( ajax => $query->param('ajax') );
 
@@ -1013,9 +1013,8 @@ The total number of results in their search, not the total number shown on the p
 
 If at any time prior to the execution of the 'perform_search' run mode you set the 
 C<< $self->param('results') >> parameter, a search will not be performed. Instead
-those results are returned. Instead, an empty result list will be returned to the
-user.  This is helpful when you decide in the C<cgiapp_init> stage that this user 
-does not have permissions to perform the desired search.
+those results are returned.  This is helpful when you decide in the C<cgiapp_init> 
+stage that this user does not have permissions to perform the desired search.
 
 =item *
 

@@ -175,9 +175,10 @@ new Ajax.Autocompleter( 'keywords', 'keywords_auto_complete', url, { parameters:
 // search with a query string and a message to display
 function ajax_search(query, msg) {
     if( Ajax.getTransport != false ) {
+        query = query + '&ajax=1';
         new Ajax.Updater( 
             'search_listing',  
-            url + "&amp;ajax=1", 
+            url, 
             { 
                 parameters: query,
                 asynchronous: 1,

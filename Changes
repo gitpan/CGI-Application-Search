@@ -1,5 +1,10 @@
 Revision history for Perl extension CGI::Application::Dispatch.
 
+1.00 (Jul 08 2006)
+    - Added Test::LongString and Test::Class to build_requires
+    - Fixed bug with URL generation not including PATH_INFO
+    - Fix bug in Ajax TT template that didn't work in non-ajax browsers
+
 0.10 (Nov 21, 2005)
     - Changes to Makefile.PL to make CPAN installation happier
     - documentation cleanup and clarifications

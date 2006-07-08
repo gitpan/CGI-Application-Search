@@ -30,6 +30,7 @@ WriteMakefile
                            'CGI::Application::Plugin::AnyTemplate' => 0,
                            'File::Spec::Functions' => 0,
                            'Text::Context' => '3.5'
+                           'Test::LongString' => 0,
                          }
         )
 ;

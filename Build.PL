@@ -20,6 +20,10 @@ Module::Build->new(
         'Text::Context'                           => 3.5,
         'File::Spec'                              => 0,
     },
+    build_requires  => {
+        'Test::LongString'                        => 0,
+        'Test::Class'                             => 0,
+    },
     create_readme      => 1,
     pm_files => {
         'lib/CGI/Application/Search.pm'      => 'lib/CGI/Application/Search.pm',
