@@ -5,7 +5,6 @@ use Carp;
 use base 'CGI::Application';
 
 use CGI::Application::Plugin::AnyTemplate;
-use CGI::Application::Plugin::HTMLPrototype;
 use Data::Page;
 use File::Spec::Functions qw(catfile splitpath catdir);
 use Number::Format qw(format_bytes format_number);
@@ -16,7 +15,7 @@ use POSIX;
 use HTML::HiLiter;
 use Text::Context;
 
-our $VERSION = '1.00';
+our $VERSION = '1.01';
 our (
     $DEBUG,                         # a debug flag
     @SUGGEST_CACHE,                 # cached suggestions
@@ -321,16 +320,32 @@ sub suggestions {
     my $self = shift;
 
     if( $self->param('AUTO_SUGGEST') ) {
-        return $self->prototype->auto_complete_result(
+        return $self->_auto_complete_results(
             $self->suggested_words(
                 $self->query->param('keywords')
             )
         );
     } else {
         carp "Trying to use auto-suggest feature without AUTO_SUGGEST turned on!";
-        return $self->prototype->auto_complete_result([]);
+        return '';
     }
 }
+
+sub _auto_complete_results {
+    my ($self, $values) = @_;
+    my $html = '<ul>';
+    foreach (@$values) {
+        # straight from the CGI.pm bible.
+        s/&/&amp;/g;
+        s/\"/&quot;/g; #"
+        s/>/&gt;/g;
+        s/</&lt;/g;
+        s/'/&#39;/g; #'
+        $html .= "<li>$_</li>";
+    }
+    return $html . '</ul>';
+}
+
 
 
 =head1 OTHER METHODS

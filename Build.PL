@@ -7,7 +7,6 @@ Module::Build->new(
         'perl'                                    => '5.6.1',
         'CGI::Application'                        => 3.2,
         'CGI::Application::Plugin::AnyTemplate'   => 0,
-        'CGI::Application::Plugin::HTMLPrototype' => 0,
         'SWISH::API'                              => 0.01,
         'HTML::HiLiter'                           => 0.12,
         'Data::Page'                              => 1.0,
