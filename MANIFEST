@@ -18,12 +18,16 @@ t/conf/data/context.html
 t/conf/data/helpme.html
 t/conf/data/nocontext.html
 t/conf/data/nodescription.html
+t/conf/data/range1.html
+t/conf/data/range2.html
+t/conf/data/range3.html
 t/conf/data/thisisatest.html
 t/conf/index_words
 t/conf/not-a-swish-e.index
 t/conf/swish-e.conf
 t/conf/swish-e.index
 t/conf/swish-e.index.prop
+t/lib/MyTest/.Base.pm.swp
 t/lib/MyTest/AJAXBase.pm
 t/lib/MyTest/Base.pm
 t/lib/MyTest/HT.pm
@@ -36,4 +40,3 @@ templates/prototype_javascript.tmpl
 templates/search_results.tmpl
 templates/search_results.tt
 TODO
-README

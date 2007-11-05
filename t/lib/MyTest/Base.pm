@@ -360,6 +360,29 @@ sub E_with_extra_props: Test(11) {
     contains_string($output, 'Results: 1 to 2 of 2');
 }
 
+sub E_with_extra_range_props: Test(3) {
+    my $self = shift;
+    my $cgi = CGI->new({
+        rm                  => 'perform_search',
+          keywords          => 'range',
+          extra_range_start => '5',
+          extra_range_stop  => '25',
+    });
+    my $app = CGI::Application::Search->new(
+        QUERY    => $cgi,
+          PARAMS => {
+            %BASE_OPTIONS, 
+            $self->options,
+            HIGHLIGHT              => 0,
+            EXTRA_RANGE_PROPERTIES => [qw(extra_range)],
+          },
+    );
+    $output = $app->run();
+    contains_string($output, '<h2>Search Results</h2>');
+    contains_string($output, 'This is a Range Test');
+    contains_string($output, 'Results: 1 to 2 of 2');
+}
+
 sub F_predefined_results: Test(2) {
     my $self = shift;
     # without  keywords
@@ -562,10 +585,6 @@ sub J_highlight_local_page: Test(1) {
     );
     my $output = $app->run();
     contains_string($output, 'you <strong>please</strong> help');
-}
-
-sub K_highlight_remote_page: Test(0) {
-    
 }
 
 # to capture and junk STDERR

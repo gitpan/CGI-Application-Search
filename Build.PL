@@ -7,7 +7,7 @@ Module::Build->new(
         'perl'                                    => '5.6.1',
         'CGI::Application'                        => 3.2,
         'CGI::Application::Plugin::AnyTemplate'   => 0,
-        'SWISH::API'                              => 0.01,
+        'SWISH::API'                              => 0.04, # in swish-e 2.4.5
         'HTML::HiLiter'                           => 0.12,
         'Data::Page'                              => 1.0,
         'File::Spec::Functions'                   => 0,

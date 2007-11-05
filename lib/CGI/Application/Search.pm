@@ -12,10 +12,9 @@ use HTML::FillInForm;
 use Time::HiRes;
 use Time::Piece;
 use POSIX;
-use HTML::HiLiter;
 use Text::Context;
 
-our $VERSION = '1.01';
+our $VERSION = '1.02';
 our (
     $DEBUG,                         # a debug flag
     @SUGGEST_CACHE,                 # cached suggestions
@@ -184,6 +183,19 @@ return to the B<show_search()> method for displaying everything.
 
 =cut
 
+sub _apply_range_values {
+    my ($self, $search) = @_;
+    my $q = $self->query;
+    if( $self->param('EXTRA_RANGE_PROPERTIES') ) {
+        foreach my $prop (@{$self->param('EXTRA_RANGE_PROPERTIES')}) {
+            my ($start, $stop) = ($q->param("${prop}_start"), $q->param("${prop}_stop")); 
+            if( defined $start and defined $stop ) {
+                $search->SetSearchLimit( $prop, $start, $stop );
+            }
+        }
+    }
+}
+
 sub perform_search {
     my $self = shift;
     my $query = $self->query;
@@ -203,12 +215,16 @@ sub perform_search {
         my $swish = SWISH::API->new( $index );
         croak "Problem reading $index : " . $swish->ErrorString
             if ( $swish->Error );
+        my $search = $swish->new_search_object();
+
+        # add any range values
+        $self->_apply_range_values($search);
 
         my $search_query = $self->generate_search_query($keywords);
         # if we got one
         if( defined $search_query ) {
 
-            my $results = $swish->Query($search_query);
+            my $results = $search->execute($search_query);
             if ( $swish->Error ) {
                 carp "Unable to create query: " .  $swish->ErrorString
                     if( $DEBUG );
@@ -219,8 +235,8 @@ sub perform_search {
 
             #create my pager and then go to the start page
             $self->_get_paging_vars($results);
-            my @words = $self->_get_search_terms( $swish, $results, $keywords );
-            $self->param( 'hits' => $self->_process_results( $swish, $results, $search_query ) );
+            my @words = $self->_get_search_terms( $swish, $search, $results, $keywords );
+            $self->param( 'hits' => $self->_process_results( $swish, $search, $results, $search_query ) );
         } else {
             return $self->show_search();
         }
@@ -228,10 +244,14 @@ sub perform_search {
 
     # if there are any extra properties used in the search, make them available to
     # the templates with the value in the query object
-    foreach my $prop ( @{$self->param('EXTRA_PROPERTIES') || []} ) {
+    my @extra_props;
+    push(@extra_props, @{$self->param('EXTRA_PROPERTIES')}) if $self->param('EXTRA_PROPERTIES');
+    push(@extra_props, @{$self->param('EXTRA_RANGE_PROPERTIES')})
+      if $self->param('EXTRA_RANGE_PROPERTIES');
+    foreach my $prop (@extra_props) {
         $self->param($prop => $query->param($prop));
-    } 
-    $self->param( 'keywords' => $keywords );
+    }
+    $self->param('keywords' => $keywords);
     return $self->show_search();
 }
 
@@ -261,6 +281,7 @@ sub highlight_remote_page {
 sub _hilight_page {
     my ($self, $page) = @_;
 
+    require HTML::HiLiter;
     my $hl = HTML::HiLiter->new(
         HiTag   => $self->param('HIGHLIGHT_TAG'),
         HiClass => $self->param('HIGHLIGHT_CLASS'),
@@ -465,22 +486,23 @@ Please see the swish-e documentation on the exact syntax for the query.
 sub generate_search_query {
     my $self = shift;
     my $keywords = shift;
+    my $q = $self->query;
 
     return undef unless( $keywords);
 
     #create a new swish-e search object
-    my $query = $self->query->param('keywords');
-    $query =~ s/=/\=/g;    #escape '=' just in case
+    my $search = $q->param('keywords');
+    $search =~ s/=/\=/g;    #escape '=' just in case
 
     #add any EXTRA_PROPERTIES to the search
     if ( $self->param('EXTRA_PROPERTIES') ) {
         foreach my $prop ( @{$self->param('EXTRA_PROPERTIES')} ) {
-            my $value = $self->query->param($prop);
-            $query .= " and $prop=($value)" if $value;
+            my $value = $q->param($prop);
+            $search .= " and $prop=($value)" if $value;
         }
     }
 
-    return $query;
+    return $search;
 }
 
 =head2 suggested_words($word)
@@ -690,6 +712,21 @@ documentation).
 
 By default, this list is empty.
 
+=head2 EXTRA_RANGE_PROPERTIES
+
+This is almost exactly like the C<EXTRA_PROPERTIES> above except that instead
+of searching for the given properties as simple strings, we will use a range.
+Since ranges need to values, if you're searching for the C<foo> property,
+then you need to have a C<foo_start> and a C<foo_end> value coming from the
+query. So if C<foo> is in your C<EXTRA_RANGE_PROPERTIES> and you have a 
+CGI query string like this:
+
+    ?foo_start=123&foo_end=234
+
+Then we will a generate a Swish-E query that looks something like this:
+
+  -L foo 123 234
+
 =head2 DESCRIPTION_LENGTH
 
 This is the maximum length for the context (in chars) that is displayed for each
@@ -740,7 +777,7 @@ run mode.
 
 #-------------------------PRIVATE METHODS-----------------------
 sub _process_results {
-    my ( $self, $swish, $results, $search_query ) = @_;
+    my ( $self, $swish, $search, $results, $search_query ) = @_;
 
     # now let's go through the results and build our loop
     my @result_loop = ();
@@ -787,6 +824,7 @@ sub _process_results {
 
             # if we want to highlight the description 
             if ( $self->param('HIGHLIGHT') ) {
+                require HTML::HiLiter;
                 my $hi_liter = HTML::HiLiter->new(
                     HiTag   => $self->param('HIGHLIGHT_TAG'),
                     HiClass => $self->param('HIGHLIGHT_CLASS'),
@@ -812,7 +850,7 @@ sub _process_results {
 }
 
 sub _get_search_terms {
-    my ( $self, $swish, $results, $keywords ) = @_;
+    my ( $self, $swish, $search, $results, $keywords ) = @_;
     my @phrases = ();
     my %terms      = ();
 
@@ -839,7 +877,7 @@ sub _get_search_terms {
     }
 
     #now look at the stems of these words
-    $terms{ $swish->StemWord($_) } = 1 foreach ( keys %terms );
+    $terms{$swish->fuzzify($swish->index_names, $_)->WordList} = 1 foreach(keys %terms);
     return keys %terms, @phrases;
 }
 

@@ -1,5 +1,9 @@
 Revision history for Perl extension CGI::Application::Dispatch.
 
+1.02 (Nov 05, 2007)
+    - Now using swish-e 2.4.5
+    - Added EXTRA_RANGE_PROPERTIES
+
 1.00 (Jul 08 2006)
     - Added Test::LongString and Test::Class to build_requires
     - Fixed bug with URL generation not including PATH_INFO

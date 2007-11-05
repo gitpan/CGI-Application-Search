@@ -222,6 +222,20 @@ CONFIGURATION
 
     By default, this list is empty.
 
+  EXTRA_RANGE_PROPERTIES
+    This is almost exactly like the "EXTRA_PROPERTIES" above except that
+    instead of searching for the given properties as simple strings, we will
+    use a range. Since ranges need to values, if you're searching for the
+    "foo" property, then you need to have a "foo_start" and a "foo_end"
+    value coming from the query. So if "foo" is in your
+    "EXTRA_RANGE_PROPERTIES" and you have a CGI query string like this:
+
+        ?foo_start=123&foo_end=234
+
+    Then we will a generate a Swish-E query that looks something like this:
+
+      -L foo 123 234
+
   DESCRIPTION_LENGTH
     This is the maximum length for the context (in chars) that is displayed
     for each search result. The default is 250 characters.
