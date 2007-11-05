@@ -27,7 +27,6 @@ t/conf/not-a-swish-e.index
 t/conf/swish-e.conf
 t/conf/swish-e.index
 t/conf/swish-e.index.prop
-t/lib/MyTest/.Base.pm.swp
 t/lib/MyTest/AJAXBase.pm
 t/lib/MyTest/Base.pm
 t/lib/MyTest/HT.pm

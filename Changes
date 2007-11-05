@@ -1,5 +1,10 @@
 Revision history for Perl extension CGI::Application::Dispatch.
 
+1.03 (Nov 05, 2007)
+    - Changed generate_search_query to allow searching when no
+      key words are specified. The search can be on other properties
+      or for everything listed.
+
 1.02 (Nov 05, 2007)
     - Now using swish-e 2.4.5
     - Added EXTRA_RANGE_PROPERTIES

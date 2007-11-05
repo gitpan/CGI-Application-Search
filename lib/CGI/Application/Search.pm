@@ -14,13 +14,15 @@ use Time::Piece;
 use POSIX;
 use Text::Context;
 
-our $VERSION = '1.02';
+our $VERSION = '1.03';
 our (
     $DEBUG,                         # a debug flag
     @SUGGEST_CACHE,                 # cached suggestions
     $SUGGEST_CACHE_TIME             # time of the last cache
 );  
 $SUGGEST_CACHE_TIME = 0;
+# some thing that will never appear in any doc that let's us return everything
+our $PHRASE_THAT_WILL_NOT_APPEAR = 'asdfqweasdfasdflqkqoiqnwlekjiquwoienlkqw';
 
 # load SWISH::API and complain if not available.  This is done here
 # and not in Makefile.PL because SWISH::API is not on CPAN.  It's part
@@ -488,10 +490,8 @@ sub generate_search_query {
     my $keywords = shift;
     my $q = $self->query;
 
-    return undef unless( $keywords);
-
     #create a new swish-e search object
-    my $search = $q->param('keywords');
+    my $search = $keywords || '';
     $search =~ s/=/\=/g;    #escape '=' just in case
 
     #add any EXTRA_PROPERTIES to the search
@@ -502,7 +502,7 @@ sub generate_search_query {
         }
     }
 
-    return $search;
+    return $search || "not $PHRASE_THAT_WILL_NOT_APPEAR";
 }
 
 =head2 suggested_words($word)
