@@ -1,5 +1,11 @@
 Revision history for Perl extension CGI::Application::Dispatch.
 
+1.04 (Nov 06, 2007)
+    - Fixed "associate" regression where data in $self->param wasn't
+      getting sent to the templates.
+    - Fixed broken Makefile.PL
+    - Adding new EXTRA_RANGE_PROPERTIES to the available fields returned in the results
+
 1.03 (Nov 05, 2007)
     - Changed generate_search_query to allow searching when no
       key words are specified. The search can be on other properties

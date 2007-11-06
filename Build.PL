@@ -32,4 +32,5 @@ Module::Build->new(
         'templates/ajax_search_results.tt'   => 'lib/CGI/Application/Search/templates/ajax_search_results.tt',
         'templates/prototype_javascript.tmpl'=> 'lib/CGI/Application/Search/templates/prototype_javascript.tmpl',
     },
+    create_makefile_pl => 'passthrough',
 )->create_build_script();

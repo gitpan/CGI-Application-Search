@@ -14,7 +14,7 @@ use Time::Piece;
 use POSIX;
 use Text::Context;
 
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 our (
     $DEBUG,                         # a debug flag
     @SUGGEST_CACHE,                 # cached suggestions
@@ -417,16 +417,18 @@ sub new {
         default_type                => $self->param('TEMPLATE_TYPE'),
         auto_add_template_extension => 0,
         include_paths               => [ $self->tmpl_path, $path ],
-        HTMLTemplate                => {
-            global_vars         => 1,
-            loop_context_vars   => 1,
-            die_on_bad_params   => 0,
-        },
-        HTMLTemplateExpr            => {
-            global_vars         => 1,
-            loop_context_vars   => 1,
-            die_on_bad_params   => 0,
-        },
+        HTMLTemplate => {
+            global_vars       => 1,
+            loop_context_vars => 1,
+            die_on_bad_params => 0,
+            associate         => $self,
+          },
+          HTMLTemplateExpr => {
+            global_vars       => 1,
+            loop_context_vars => 1,
+            die_on_bad_params => 0,
+            associate         => $self,
+          },
         TemplateToolkit             => {
             ABSOLUTE            => 1,
             DEBUG_PROVIDER      => 1,
@@ -799,6 +801,10 @@ sub _process_results {
         if ( $self->param('EXTRA_PROPERTIES') ) {
             $tmp{$_} = eval { $current->Property($_) }
               foreach ( @{ $self->param('EXTRA_PROPERTIES') } );
+        }
+        if ( $self->param('EXTRA_RANGE_PROPERTIES') ) {
+            $tmp{$_} = eval { $current->Property($_) }
+              foreach ( @{ $self->param('EXTRA_RANGE_PROPERTIES') } );
         }
 
         my $description = $tmp{description};

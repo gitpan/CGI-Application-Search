@@ -1,6 +1,6 @@
 ---
 name: CGI-Application-Search
-version: 1.03
+version: 1.04
 author:
   - 'Michael Peters <mpeters@plusthree.com>'
 abstract: Base class for CGI::App Swish-e site engines
@@ -28,7 +28,7 @@ build_requires:
 provides:
   CGI::Application::Search:
     file: lib/CGI/Application/Search.pm
-    version: 1.03
+    version: 1.04
 generated_by: Module::Build version 0.2808
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html
