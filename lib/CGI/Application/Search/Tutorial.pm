@@ -1,4 +1,5 @@
-use strict; # this makes CPANTS happy, even though it's straight POD
+use strict;    # this makes CPANTS happy, even though it's straight POD
+
 =head1 NAME 
 
 CGI::Application::Search::Tutorial - How do we use this thing?
@@ -280,5 +281,4 @@ Thanks to Plus Three, LP (http://www.plusthree.com) for sponsoring my work on th
 # just in case someone is stupid enough to actually 'use' us :)
 
 1;
-
 

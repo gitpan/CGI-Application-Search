@@ -1,5 +1,10 @@
 Revision history for Perl extension CGI::Application::Dispatch.
 
+1.05 (Jan 02, 2007)
+    - Can now search on poperties that are false, but still there (I'm thinking of you
+      zero)
+    - Added SORT_BY configuration param to change the order.
+
 1.04 (Nov 06, 2007)
     - Fixed "associate" regression where data in $self->param wasn't
       getting sent to the templates.
@@ -9,7 +14,8 @@ Revision history for Perl extension CGI::Application::Dispatch.
 1.03 (Nov 05, 2007)
     - Changed generate_search_query to allow searching when no
       key words are specified. The search can be on other properties
-      or for everything listed.
+      or for everything listed. NOTE: This breaks backwards compatability
+      if you were relying on empty searches returning no results.
 
 1.02 (Nov 05, 2007)
     - Now using swish-e 2.4.5

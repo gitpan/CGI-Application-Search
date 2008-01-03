@@ -13,11 +13,17 @@ SYNOPSIS
             );
         }
 
-        #let the user turn context highlighting off
         sub cgiapp_prerun {
             my $self = shift;
+            my $query = $self->query;
+
+            # let the user turn context highlighting off
             $self->param('HIGHLIGHT' => 0)
-                if($self->query->param('highlight_off'));
+                if($query->param('highlight_off'));
+
+            # let the user change which property is used in the sort
+            my $sort_by = $query->param('sort_by');
+            $self->param('SORT_BY' => $sort_by) if $sort_by;
         }
 
         1;
@@ -277,6 +283,166 @@ CONFIGURATION
     This is the root directory to use when looking for files when using the
     "highlight_local_page" run mode.
 
+  SORT_BY
+    This is a string used by Swish-e to sort the results. The string is a
+    space separated list of valid document properties. Each property may
+    contain a qualifier (either "asc" or "desc") that sets the direction of
+    the sort. Leave it alone and Swish-e will sort by "swishrank" in
+    descending order. But say you wanted to reverse that for some reason.
+    You could specify a "SORT_BY" of
+
+        swishrank asc
+
+    See =cut
+
+    #-------------------------PRIVATE METHODS----------------------- sub
+    _process_results { my ($self, $swish, $search, $results, $search_query)
+    = @_;
+
+        # now let's go through the results and build our loop
+        my @result_loop = ();
+        my $count       = 0;
+
+        # while we still have more results
+        while(my $current = $results->NextResult) {
+            my %tmp = (
+                reccount    => $current->Property('swishreccount'),
+                rank        => $current->Property('swishrank'),
+                title       => $current->Property('swishtitle'),
+                path        => $current->Property('swishdocpath'),
+                size        => format_bytes($current->Property('swishdocsize')),
+                description => $current->Property('swishdescription') || '',
+                last_modified =>
+                  localtime($current->Property('swishlastmodified'))->strftime('%B %d, %Y'),
+            );
+
+            # now add any EXTRA_PROPERTIES that we want to show
+            if($self->param('EXTRA_PROPERTIES')) {
+                $tmp{$_} = eval { $current->Property($_) } foreach(@{$self->param('EXTRA_PROPERTIES')});
+            }
+            if($self->param('EXTRA_RANGE_PROPERTIES')) {
+                $tmp{$_} = eval { $current->Property($_) }
+                  foreach(@{$self->param('EXTRA_RANGE_PROPERTIES')});
+            }
+
+            my $description = $tmp{description};
+            if($description) {
+
+                # if we want to zero in on the context
+                if($self->param('DESCRIPTION_CONTEXT')) {
+
+                    # get the keywords from the swish search
+                    my @keywords = ();
+                    foreach my $kw ($results->ParsedWords($self->param('SWISHE_INDEX'))) {
+
+                        # remove boolean operators 'and', 'or' and 'not'
+                        my $lc_kw = lc($kw);
+                        if($lc_kw ne 'and' && $lc_kw ne 'or' && $lc_kw ne 'not') {
+                            push(@keywords, $kw);
+                        }
+                    }
+
+                    # now get the context
+                    my $context = Text::Context->new($description, @keywords,);
+                    $description = $context->as_text();
+                }
+
+                # if we want to highlight the description
+                if($self->param('HIGHLIGHT')) {
+                    require HTML::HiLiter;
+                    my $hi_liter = HTML::HiLiter->new(
+                        HiTag   => $self->param('HIGHLIGHT_TAG'),
+                        HiClass => $self->param('HIGHLIGHT_CLASS'),
+                        Colors  => $self->param('HIGHLIGHT_COLORS'),
+                        SWISH   => $swish,
+                        Parser  => 0,
+                    );
+                    $hi_liter->Queries($search_query);
+                    $hi_liter->Inline();
+                    $description = $hi_liter->plaintext($description);
+                }
+
+                # now make sure it's the appropriate length
+                $tmp{description} = substr($description, 0, $self->param('DESCRIPTION_LENGTH'));
+            }
+            push(@result_loop, \%tmp);
+
+            # only go as far as the number per page
+            ++$count;
+            last if($count == $self->param('PER_PAGE'));
+        }
+        return \@result_loop;
+    }
+
+    sub _get_search_terms { my ($self, $swish, $search, $results, $keywords)
+    = @_; my @phrases = (); my %terms = ();
+
+        while($keywords =~ /\G\s*"([^"]+)"/g) {
+            push(@phrases, $1);
+        }
+
+        $keywords =~ s/"[^"]+?"//g;
+
+        # remove stop words from highlighting
+        # for some reason swish-e doesn't remove boolean operators as stop words... which
+        # is probably good so that they actually get used in the searches, but still...
+        my %stop_words = ();
+        foreach my $word ($results->RemovedStopwords($self->param('SWISHE_INDEX')), 'and', 'or', 'not')
+        {
+            $stop_words{$word} = 1;
+        }
+        $stop_words{$_} = 1 foreach qw(and or not);
+
+        for my $word (split(/\s+/, $keywords)) {
+            if($word) {
+                next if $stop_words{$word};
+                $terms{$word} = 1;
+            }
+        }
+
+        # now look at the stems of these words
+        $terms{$swish->fuzzify($swish->index_names, $_)->WordList} = 1 foreach(keys %terms);
+        return keys %terms, @phrases;
+    }
+
+    # create a loop of pages with the first page, at most five pages before
+    # the current page, the current page, at most five pages after the
+    current page # and then the last page sub _get_paging_vars { my ($self,
+    $results) = @_; my @pages = ();
+
+        # create my pager from the 'page' parameter in CGI or just use the first page
+        my $page_num = $self->query->param('page') || 1;
+        my $pager = Data::Page->new($results->Hits, $self->param('PER_PAGE'), $page_num);
+
+        # go to the result that we want to look at first
+        $results->SeekResult($pager->first - 1);
+
+        # now let's create the paging summary vars
+        $self->param('total_entries' => $pager->total_entries);
+        $self->param('start_num'     => $pager->first);
+        $self->param('stop_num'      => $pager->last);
+        $self->param('next_page'     => $pager->next_page);
+        $self->param('prev_page'     => $pager->previous_page);
+        $self->param('first_page'    => $pager->first_page eq $page_num);
+        $self->param('last_page'     => $pager->last_page eq $page_num);
+
+        foreach(($page_num - 5) .. ($page_num + 5)) {
+
+            # if we are in a real range
+            if(    ($_ > 0)
+                && ($_ <= ceil($pager->total_entries / $self->param('PER_PAGE'))))
+            {
+                my %hash = (page_num => $_, current => $_ eq $page_num);
+                push(@pages, \%hash);
+            }
+        }
+        $self->param(pages => \@pages) if($#pages);
+    }
+
+    1;
+
+    __END__
+
 TEMPLATE USAGE
     Sample templates are included with this distribution. These sample
     templates are installed with the module, or you can view them by looking
@@ -402,4 +568,5 @@ AUTHOR
 CONTRIBUTORS
     Sam Tregar <sam@tregar.com>
     Mark Stosberg <mark@summersault.com>
+    Eric Folley <efolley@plusthree.com>
 
