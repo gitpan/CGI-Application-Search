@@ -1,8 +1,7 @@
 package CGI::Application::Search;
+use base 'CGI::Application';
 use strict;
 use warnings;
-use base 'CGI::Application';
-
 use Carp;
 use CGI::Application::Plugin::AnyTemplate;
 use Data::Page;
@@ -11,10 +10,13 @@ use Number::Format qw(format_bytes format_number);
 use HTML::FillInForm;
 use Time::HiRes;
 use Time::Piece;
-use POSIX;
+use POSIX qw(ceil);
 use Text::Context;
+use Unicode::Normalize;
+use Encode qw(decode_utf8 encode_utf8);
+use File::Slurp qw(read_file);
 
-our $VERSION = '1.05';
+our $VERSION = '1.10';
 our (
     $DEBUG,                # a debug flag
     @SUGGEST_CACHE,        # cached suggestions
@@ -23,7 +25,7 @@ our (
 $SUGGEST_CACHE_TIME = 0;
 
 # some thing that will never appear in any doc that let's us return everything
-our $PHRASE_THAT_WILL_NOT_APPEAR = 'asdfqweasdfasdflqkqoiqnwlekjiquwoienlkqw';
+our $BLANK_SEARCH = 'not asdfqweasdfasdflqkqoiqnwlekjiquwoienlkqw';
 
 # load SWISH::API and complain if not available.  This is done here
 # and not in Makefile.PL because SWISH::API is not on CPAN.  It's part
@@ -39,6 +41,28 @@ CGI::Application::Search documentation for more details.
 END
 }
 
+__PACKAGE__->add_callback(
+    init => sub {
+        my $self = shift;
+        return unless $self->param('UTF8');
+        my $q = $self->query;
+        $q->charset('UTF-8');
+
+        # mark the strings as UTF8 so other stuff doesn't have to worry about it
+        my @names = $q->param();
+        foreach my $name (@names) {
+            my @values = $q->param($name);
+            foreach my $i (0 .. $#values) {
+                # don't do filehandles
+                next if lc(ref $values[$i]) eq 'fh';
+                $values[$i] = Unicode::Normalize::NFC(decode_utf8($values[$i]));
+            }
+
+            $q->param($name => @values);
+        }
+    }
+);
+
 =head1 NAME 
 
 CGI::Application::Search - Base class for CGI::App Swish-e site engines
@@ -47,7 +71,7 @@ CGI::Application::Search - Base class for CGI::App Swish-e site engines
 
     package My::Search;
     use base 'CGI::Application::Search';
-	
+
     sub cgiapp_init {
         my $self = shift;
         $self->param(
@@ -57,12 +81,11 @@ CGI::Application::Search - Base class for CGI::App Swish-e site engines
     }
 
     sub cgiapp_prerun {
-        my $self = shift;
+        my $self  = shift;
         my $query = $self->query;
 
         # let the user turn context highlighting off
-        $self->param('HIGHLIGHT' => 0)
-            if($query->param('highlight_off'));
+        $self->param('HIGHLIGHT' => 0) if $query->param('highlight_off');
 
         # let the user change which property is used in the sort
         my $sort_by = $query->param('sort_by');
@@ -127,13 +150,13 @@ AJAX search).
 =cut 
 
 sub show_search {
-    my $self  = shift;
-    my $query = $self->query();
+    my $self = shift;
+    my $q    = $self->query();
 
     my $tmpl_file;
 
     # if we have a user specified template
-    if($self->param('TEMPLATE')) {
+    if ($self->param('TEMPLATE')) {
         $tmpl_file = $self->param('TEMPLATE');
 
     } else {
@@ -154,23 +177,23 @@ sub show_search {
       stop_num total_entries
       ) {
         $tmpl->param($param => $self->param($param))
-          if($self->param($param));
+          if ($self->param($param));
       }
 
-    # add this url to the template too
-    $tmpl->param(url => $query->url(-absolute => 1, path_info => 1));
+      # add this url to the template too
+      $tmpl->param(url => $q->url(-absolute => 1, path_info => 1));
 
     # add the possible ajax flag
-    $tmpl->param(ajax => $query->param('ajax'));
+    $tmpl->param(ajax => $q->param('ajax'));
 
     my $output = $tmpl->output();
 
     # don't use FiF if we are using AJAX
-    unless($self->param('AJAX') && $query->param('ajax')) {
+    unless ($self->param('AJAX') && $q->param('ajax')) {
         my $filler = HTML::FillInForm->new();
         $output = $filler->fill(
             scalarref => ref($output) ? $output : \$output,
-            fobject => $query,
+            fobject => $q,
         );
     }
     return $output;
@@ -182,7 +205,7 @@ This is where the meat of the searching is performed. We create a
 L<SWISH::API> object on the B<SWISHE_INDEX> and create the query for the
 search based on the value of the I<keywords> parameter in CGI and any
 other B<EXTRA_PARAMETERS>. The search is executed and if B<HIGHLIGHT>
-is true we will use L<HTML::HiLiter> to highlight it and then format
+is true we will use L<Search::Tools::HiLiter> to highlight it and then format
 the results, only showing B<PER_PAGE> number of elements A paging list
 is also shown for navigating through the results. Then we will return
 to the B<show_search()> method for displaying everything.
@@ -192,10 +215,10 @@ to the B<show_search()> method for displaying everything.
 sub _apply_range_values {
     my ($self, $search) = @_;
     my $q = $self->query;
-    if($self->param('EXTRA_RANGE_PROPERTIES')) {
+    if ($self->param('EXTRA_RANGE_PROPERTIES')) {
         foreach my $prop (@{$self->param('EXTRA_RANGE_PROPERTIES')}) {
             my ($start, $stop) = ($q->param("${prop}_start"), $q->param("${prop}_stop"));
-            if(defined $start and defined $stop) {
+            if (defined $start and defined $stop) {
                 $search->SetSearchLimit($prop, $start, $stop);
             }
         }
@@ -203,17 +226,17 @@ sub _apply_range_values {
 }
 
 sub perform_search {
-    my $self  = shift;
-    my $query = $self->query;
+    my $self = shift;
+    my $q    = $self->query;
 
     # if we have any keywords
-    my $keywords = $self->query->param('keywords');
-    if(defined $keywords && !$self->param('results')) {
+    my $keywords = $q->param('keywords');
+    if (defined $keywords && !$self->param('results')) {
         my $index = $self->param('SWISHE_INDEX');
 
         # make sure the index exists and is readable
         croak "Index file $index does not exist!"
-          unless(-e $index);
+          unless (-e $index);
 
         $self->param('searched' => 1);
         my $start_time = Time::HiRes::time();
@@ -221,7 +244,7 @@ sub perform_search {
         # create my swish-e object
         my $swish = SWISH::API->new($index);
         croak "Problem reading $index : " . $swish->ErrorString
-          if($swish->Error);
+          if ($swish->Error);
         my $search = $swish->new_search_object();
 
         # add any range values
@@ -234,12 +257,12 @@ sub perform_search {
         my $search_query = $self->generate_search_query($keywords);
 
         # if we got one
-        if(defined $search_query) {
+        if (defined $search_query) {
 
             my $results = $search->execute($search_query);
-            if($swish->Error) {
+            if ($swish->Error) {
                 carp "Unable to create query: " . $swish->ErrorString
-                  if($DEBUG);
+                  if ($DEBUG);
                 return $self->show_search();
             }
 
@@ -262,7 +285,7 @@ sub perform_search {
     push(@extra_props, @{$self->param('EXTRA_RANGE_PROPERTIES')})
       if $self->param('EXTRA_RANGE_PROPERTIES');
     foreach my $prop (@extra_props) {
-        $self->param($prop => $query->param($prop));
+        $self->param($prop => $q->param($prop));
     }
     $self->param('keywords' => $keywords);
     return $self->show_search();
@@ -281,33 +304,49 @@ run mode is best used in the links of the search results listing.
 =cut
 
 sub highlight_remote_page {
-    my $self  = shift;
-    my $query = $self->query();
-    my $url   = $query->param('url');
+    my $self = shift;
+    my $q    = $self->query();
+    my $url  = $q->param('url');
 
     # if it's relative, get the hostname and make it absolute
-    if($url !~ /^https?:\/\//) {
-        $url = $query->url(-base => 1) . $url;
+    if ($url !~ /^https?:\/\//) {
+        $url = $q->url(-base => 1) . $url;
     }
     return $self->_hilight_page($url);
 }
 
 sub _hilight_page {
     my ($self, $page) = @_;
+    my $content;
 
-    require HTML::HiLiter;
-    my $hl = HTML::HiLiter->new(
-        HiTag   => $self->param('HIGHLIGHT_TAG'),
-        HiClass => $self->param('HIGHLIGHT_CLASS'),
-        Colors  => $self->param('HIGHLIGHT_COLORS'),
-        Print   => 0,
-        Parser  => 0,
-    );
+    # Search::Tools::HiLiter doesn't like blank searches so handle those on our own
+    if( -e $page ) {
+        $content = decode_utf8(read_file($page));
+    } else {
+        require HTTP::Request;
+        require LWP::UserAgent;
+        my $ua  = LWP::UserAgent->new();
+        my $request  = HTTP::Request->new( GET => $page);
+        my $response = $ua->request($request);
+        if ( $response->is_error ) {
+            warn "Error: Couldn't get '$page': response code " . $response->code . "\n";
+            return;
+        }
 
-    $hl->Queries($self->query->param('keywords'));
-    $hl->Inline();
+        $content = $response->content;
+    }
 
-    return $hl->Run($page);
+    my $search_query = $self->query->param('keywords');
+    if( $search_query && $search_query ne $BLANK_SEARCH ) {
+        require Search::Tools::HiLiter;
+        $content = Search::Tools::HiLiter->new(
+            tag          => $self->param('HIGHLIGHT_TAG'),
+            class        => $self->param('HIGHLIGHT_CLASS'),
+            colors       => $self->param('HIGHLIGHT_COLORS'),
+            query        => $search_query,
+        )->hilite($content);
+    }
+    return $content;
 }
 
 =head2 highlight_local_page
@@ -325,11 +364,11 @@ of the search results listing.
 
 sub highlight_local_page {
     my $self     = shift;
-    my $query    = $self->query();
+    my $q        = $self->query();
     my $doc_root = $self->param('DOCUMENT_ROOT');
-    my $path     = $query->param('path');
+    my $path     = $q->param('path');
 
-    if(!$doc_root) {
+    if (!$doc_root) {
         croak "You must define your DOCUMENT_ROOT to use this run mode!";
     }
 
@@ -352,7 +391,7 @@ send back.
 sub suggestions {
     my $self = shift;
 
-    if($self->param('AUTO_SUGGEST')) {
+    if ($self->param('AUTO_SUGGEST')) {
         return $self->_auto_complete_results(
             $self->suggested_words($self->query->param('keywords')));
     } else {
@@ -364,7 +403,7 @@ sub suggestions {
 sub _auto_complete_results {
     my ($self, $values) = @_;
     my $html = '<ul>';
-    foreach(@$values) {
+    foreach (@$values) {
 
         # straight from the CGI.pm bible.
         s/&/&amp;/g;
@@ -402,15 +441,16 @@ sub new {
         PER_PAGE           => 10,
         HIGHLIGHT          => 1,
         HIGHLIGHT_TAG      => q(strong),
-        HIGHLIGHT_CLASS    => '',
+        HIGHLIGHT_CLASS    => 'hilite',
         HIGHLIGHT_COLORS   => [],
         DESCRIPTION_LENGTH => 250,
         TEMPLATE_TYPE      => 'HTMLTemplate',
         TEMPLATE_CONFIG    => undef,
+        UTF8               => 1,
     );
     foreach my $k (keys %defaults) {
         $self->param($k => $defaults{$k})
-          unless(defined $self->param($k));
+          unless (defined $self->param($k));
     }
 
     # setup the template configs
@@ -440,7 +480,7 @@ sub new {
     );
 
     # add any overriding TEMPLATE_CONFIG options
-    if($self->param('TEMPLATE_CONFIG')) {
+    if ($self->param('TEMPLATE_CONFIG')) {
         $tmpl_config{$self->param('TEMPLATE_TYPE')} =
           {%{$tmpl_config{$self->param('TEMPLATE_TYPE')}}, %{$self->param('TEMPLATE_CONFIG')},};
     }
@@ -503,14 +543,14 @@ sub generate_search_query {
     $search =~ s/=/\=/g;    # escape '=' just in case
 
     # add any EXTRA_PROPERTIES to the search
-    if($self->param('EXTRA_PROPERTIES')) {
+    if ($self->param('EXTRA_PROPERTIES')) {
         foreach my $prop (@{$self->param('EXTRA_PROPERTIES')}) {
             my $value = $q->param($prop);
             $search .= " and $prop=($value)" if defined $value && length $value;
         }
     }
 
-    return $search || "not $PHRASE_THAT_WILL_NOT_APPEAR";
+    return $search || $BLANK_SEARCH;
 }
 
 =head2 suggested_words($word)
@@ -537,10 +577,10 @@ sub suggested_words {
     my $file          = $self->param('AUTO_SUGGEST_FILE');
     my @suggestions;
 
-    if(!$file) {
+    if (!$file) {
         warn "AUTO_SUGGEST_FILE was not specified!";
         return [];
-    } elsif(!-r $file) {
+    } elsif (!-r $file) {
         warn "AUTO_SUGGEST_FILE $file is not readable!";
         return [];
     }
@@ -548,24 +588,24 @@ sub suggested_words {
     # if we are going to use the cache (meaning we want to use
     # it and there's up-to-date data in there)
     my $file_mod_time = (stat($file))[9];
-    if(     $want_to_cache
+    if (    $want_to_cache
         and @SUGGEST_CACHE
         and $SUGGEST_CACHE_TIME >= $file_mod_time)
     {
         foreach my $cached (@SUGGEST_CACHE) {
 
             # if it starts with this $word
-            if(index($cached, lc $word) == 0) {
+            if (index($cached, lc $word) == 0) {
                 push(@suggestions, $cached);
 
                 # else if this is the first mis-match
-            } elsif(@suggestions) {
+            } elsif (@suggestions) {
                 last;
             }
 
             # if we have a limit and we've reached it
             # don't do any more
-            if(     $self->param('AUTO_SUGGEST_LIMIT')
+            if (    $self->param('AUTO_SUGGEST_LIMIT')
                 and @suggestions >= $self->param('AUTO_SUGGEST_LIMIT'))
             {
                 last;
@@ -576,7 +616,7 @@ sub suggested_words {
     } else {
 
         # reset it if we want to cache
-        if($want_to_cache) {
+        if ($want_to_cache) {
             @SUGGEST_CACHE      = ();
             $SUGGEST_CACHE_TIME = time();
         }
@@ -587,28 +627,28 @@ sub suggested_words {
           or die "Could not open $file for reading! $!";
 
         # now look at each line
-      LINE: while(my $line = <$IN>) {
+      LINE: while (my $line = <$IN>) {
 
             # if we want to cache the words in this file
-            if($want_to_cache) {
+            if ($want_to_cache) {
                 chomp($line);
                 push(@SUGGEST_CACHE, $line);
             }
 
             # if it starts with this $word
-            if(index($line, lc $word) == 0) {
-                chomp($line) unless($want_to_cache);
+            if (index($line, lc $word) == 0) {
+                chomp($line) unless ($want_to_cache);
                 push(@suggestions, $line);
 
                 # else if we aren't caching, and this is the first mis-match
                 # then we want to finish and close the file
-            } elsif(@suggestions && !$want_to_cache) {
+            } elsif (@suggestions && !$want_to_cache) {
                 last LINE;
             }
 
             # if we have a limit and we've reached it
             # don't do any more
-            if(     $self->param('AUTO_SUGGEST_LIMIT')
+            if (    $self->param('AUTO_SUGGEST_LIMIT')
                 and @suggestions >= $self->param('AUTO_SUGGEST_LIMIT'))
             {
                 last;
@@ -620,7 +660,7 @@ sub suggested_words {
 
     # if we have something in the phrase that's not
     # in the word, add the phrase before the suggestion
-    if(@phrase_words) {
+    if (@phrase_words) {
         my $prefix = join(' ', @phrase_words);
         @suggestions = map { "$prefix $_" } @suggestions;
     }
@@ -809,7 +849,7 @@ sub _process_results {
     my $count       = 0;
 
     # while we still have more results
-    while(my $current = $results->NextResult) {
+    while (my $current = $results->NextResult) {
         my %tmp = (
             reccount    => $current->Property('swishreccount'),
             rank        => $current->Property('swishrank'),
@@ -822,19 +862,20 @@ sub _process_results {
         );
 
         # now add any EXTRA_PROPERTIES that we want to show
-        if($self->param('EXTRA_PROPERTIES')) {
-            $tmp{$_} = eval { $current->Property($_) } foreach(@{$self->param('EXTRA_PROPERTIES')});
-        }
-        if($self->param('EXTRA_RANGE_PROPERTIES')) {
+        if ($self->param('EXTRA_PROPERTIES')) {
             $tmp{$_} = eval { $current->Property($_) }
-              foreach(@{$self->param('EXTRA_RANGE_PROPERTIES')});
+              foreach (@{$self->param('EXTRA_PROPERTIES')});
+        }
+        if ($self->param('EXTRA_RANGE_PROPERTIES')) {
+            $tmp{$_} = eval { $current->Property($_) }
+              foreach (@{$self->param('EXTRA_RANGE_PROPERTIES')});
         }
 
         my $description = $tmp{description};
-        if($description) {
+        if ($description) {
 
             # if we want to zero in on the context
-            if($self->param('DESCRIPTION_CONTEXT')) {
+            if ($self->param('DESCRIPTION_CONTEXT')) {
 
                 # get the keywords from the swish search
                 my @keywords = ();
@@ -842,7 +883,7 @@ sub _process_results {
 
                     # remove boolean operators 'and', 'or' and 'not'
                     my $lc_kw = lc($kw);
-                    if($lc_kw ne 'and' && $lc_kw ne 'or' && $lc_kw ne 'not') {
+                    if ($lc_kw ne 'and' && $lc_kw ne 'or' && $lc_kw ne 'not') {
                         push(@keywords, $kw);
                     }
                 }
@@ -853,18 +894,15 @@ sub _process_results {
             }
 
             # if we want to highlight the description
-            if($self->param('HIGHLIGHT')) {
-                require HTML::HiLiter;
-                my $hi_liter = HTML::HiLiter->new(
-                    HiTag   => $self->param('HIGHLIGHT_TAG'),
-                    HiClass => $self->param('HIGHLIGHT_CLASS'),
-                    Colors  => $self->param('HIGHLIGHT_COLORS'),
-                    SWISH   => $swish,
-                    Parser  => 0,
+            if ($self->param('HIGHLIGHT') && $search_query && $search_query ne $BLANK_SEARCH) {
+                require Search::Tools::HiLiter;
+                my $hl = Search::Tools::HiLiter->new(
+                    tag          => $self->param('HIGHLIGHT_TAG'),
+                    class        => $self->param('HIGHLIGHT_CLASS'),
+                    colors       => $self->param('HIGHLIGHT_COLORS'),
+                    query        => $search_query,
                 );
-                $hi_liter->Queries($search_query);
-                $hi_liter->Inline();
-                $description = $hi_liter->plaintext($description);
+                $description = $hl->plain($description);
             }
 
             # now make sure it's the appropriate length
@@ -874,7 +912,7 @@ sub _process_results {
 
         # only go as far as the number per page
         ++$count;
-        last if($count == $self->param('PER_PAGE'));
+        last if ($count == $self->param('PER_PAGE'));
     }
     return \@result_loop;
 }
@@ -884,7 +922,7 @@ sub _get_search_terms {
     my @phrases = ();
     my %terms   = ();
 
-    while($keywords =~ /\G\s*"([^"]+)"/g) {
+    while ($keywords =~ /\G\s*"([^"]+)"/g) {
         push(@phrases, $1);
     }
 
@@ -901,14 +939,14 @@ sub _get_search_terms {
     $stop_words{$_} = 1 foreach qw(and or not);
 
     for my $word (split(/\s+/, $keywords)) {
-        if($word) {
+        if ($word) {
             next if $stop_words{$word};
             $terms{$word} = 1;
         }
     }
 
     # now look at the stems of these words
-    $terms{$swish->fuzzify($swish->index_names, $_)->WordList} = 1 foreach(keys %terms);
+    $terms{$swish->fuzzify($swish->index_names, $_)->WordList} = 1 foreach (keys %terms);
     return keys %terms, @phrases;
 }
 
@@ -935,17 +973,14 @@ sub _get_paging_vars {
     $self->param('first_page'    => $pager->first_page eq $page_num);
     $self->param('last_page'     => $pager->last_page eq $page_num);
 
-    foreach(($page_num - 5) .. ($page_num + 5)) {
-
+    foreach (($page_num - 5) .. ($page_num + 5)) {
         # if we are in a real range
-        if(    ($_ > 0)
-            && ($_ <= ceil($pager->total_entries / $self->param('PER_PAGE'))))
-        {
+        if (($_ > 0) && ($_ <= ceil($pager->total_entries / $self->param('PER_PAGE')))) {
             my %hash = (page_num => $_, current => $_ eq $page_num);
             push(@pages, \%hash);
         }
     }
-    $self->param(pages => \@pages) if($#pages);
+    $self->param(pages => \@pages) if ($#pages);
 }
 
 1;
