@@ -349,14 +349,18 @@ CONFIGURATION
 
                 # if we want to highlight the description
                 if ($self->param('HIGHLIGHT') && $search_query && $search_query ne $BLANK_SEARCH) {
-                    require Search::Tools::HiLiter;
-                    my $hl = Search::Tools::HiLiter->new(
-                        tag          => $self->param('HIGHLIGHT_TAG'),
-                        class        => $self->param('HIGHLIGHT_CLASS'),
-                        colors       => $self->param('HIGHLIGHT_COLORS'),
-                        query        => $search_query,
-                    );
-                    $description = $hl->plain($description);
+                    eval { require Search::Tools::HiLiter };
+                    if ($@) {
+                        warn "Could not load Search::Tools::HiLiter so no hilighting will be done: $@";
+                    } else {
+                        my $hl = Search::Tools::HiLiter->new(
+                            tag    => $self->param('HIGHLIGHT_TAG'),
+                            class  => $self->param('HIGHLIGHT_CLASS'),
+                            colors => $self->param('HIGHLIGHT_COLORS'),
+                            query  => $search_query,
+                        );
+                        $description = $hl->plain($description);
+                    }
                 }
 
                 # now make sure it's the appropriate length
