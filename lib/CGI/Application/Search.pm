@@ -16,7 +16,7 @@ use Unicode::Normalize;
 use Encode qw(decode_utf8 encode_utf8);
 use File::Slurp qw(read_file);
 
-our $VERSION = '1.13';
+our $VERSION = '1.14';
 our (
     $DEBUG,                # a debug flag
     @SUGGEST_CACHE,        # cached suggestions
@@ -207,7 +207,7 @@ sub show_search {
 This is where the meat of the searching is performed. We create a
 L<SWISH::API> object on the B<SWISHE_INDEX> and create the query for the
 search based on the value of the I<keywords> parameter in CGI and any
-other B<EXTRA_PARAMETERS>. The search is executed and if B<HIGHLIGHT>
+other B<EXTRA_PROPERTIES>. The search is executed and if B<HIGHLIGHT>
 is true we will use L<Search::Tools::HiLiter> to highlight it and then format
 the results, only showing B<PER_PAGE> number of elements A paging list
 is also shown for navigating through the results. Then we will return
@@ -524,7 +524,7 @@ sub setup {
 =head2 generate_search_query($keywords)
 
 This method is used to generate the query for swish-e from the
-$keywords (by default the 'keywords' CGI parameter), as well as any
+C<$keywords> (by default the 'keywords' CGI parameter), as well as any
 B<EXTRA_PROPERTIES> that are present.
 
 If you wish to generate your own search query then you should override
@@ -549,7 +549,8 @@ sub generate_search_query {
     if ($self->param('EXTRA_PROPERTIES')) {
         foreach my $prop (@{$self->param('EXTRA_PROPERTIES')}) {
             my $value = $q->param($prop);
-            $search .= " and $prop=($value)" if defined $value && length $value;
+            $search .= ' and ' if $search;
+            $search .= "$prop=($value)" if defined $value && length $value;
         }
     }
 
